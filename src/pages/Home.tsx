@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PayPalButtons, PayPalScriptProvider, usePayPalScriptReducer } from '@paypal/react-paypal-js';
+import { Helmet } from 'react-helmet-async';
 
 type ConsultingServiceKey = 'review' | 'interview';
 
@@ -83,6 +84,7 @@ export function Home() {
     const [consultingError, setConsultingError] = useState('');
     const [consultingLoading, setConsultingLoading] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
     const navigate = useNavigate();
 
     // Clear any leftover demo data when Home mounts (e.g. user came back from demo preview)
@@ -226,6 +228,57 @@ export function Home() {
 
     return (
         <div className="min-h-screen bg-white text-[#112E51] font-sans selection:bg-[#29AEE1] selection:text-white">
+            <Helmet>
+                <title>Korean Resume Builder for Foreigners | Korean Resume Review | Arthurian</title>
+                <meta
+                    name="description"
+                    content="AI Korean resume builder for foreigners: convert English CV to Korean resume, then get Korean Resume Review and Custom Interview Questions by experts."
+                />
+                <meta
+                    name="keywords"
+                    content="korean resume, korean resume review, custom interview questions, english to korean resume, korean CV translation, korea job application, korean resume for foreigners, korean interview preparation"
+                />
+                <link rel="canonical" href="https://www.arthrian.cloud/" />
+                <meta property="og:title" content="Korean Resume Builder & Korean Resume Review | Arthurian" />
+                <meta
+                    property="og:description"
+                    content="Upload English resume, get Korean resume output, and request expert Korean Resume Review + Custom Interview Questions."
+                />
+                <meta property="og:url" content="https://www.arthrian.cloud/" />
+                <script type="application/ld+json">
+                    {JSON.stringify({
+                        '@context': 'https://schema.org',
+                        '@type': 'FAQPage',
+                        mainEntity: [
+                            {
+                                '@type': 'Question',
+                                name: 'How do I convert an English resume into a Korean resume?',
+                                acceptedAnswer: {
+                                    '@type': 'Answer',
+                                    text: 'Upload your English PDF resume. Arthurian extracts resume content and generates a Korean HR-style resume format.',
+                                },
+                            },
+                            {
+                                '@type': 'Question',
+                                name: 'Do you provide Korean resume review by humans?',
+                                acceptedAnswer: {
+                                    '@type': 'Answer',
+                                    text: 'Yes. You can request Korean Resume Review and receive expert corrections focused on Korean hiring standards.',
+                                },
+                            },
+                            {
+                                '@type': 'Question',
+                                name: 'Can I get custom Korean interview questions?',
+                                acceptedAnswer: {
+                                    '@type': 'Answer',
+                                    text: 'Yes. Custom Interview Questions are generated based on your resume and target company.',
+                                },
+                            },
+                        ],
+                    })}
+                </script>
+            </Helmet>
+
             {/* Top Announcement Bar */}
             <div className="bg-[#041B3B] text-white text-[12px] py-2 px-6 shadow-sm flex items-center justify-center md:justify-between font-medium tracking-wide">
                 <div className="hidden md:flex flex-1"></div>
@@ -796,7 +849,7 @@ export function Home() {
                         Zero Retention Policy
                     </button>
                     <button className="hover:text-[#112E51] transition-colors">Terms of Service</button>
-                    <button className="hover:text-[#112E51] transition-colors">Contact</button>
+                    <button onClick={() => setShowContactModal(true)} className="hover:text-[#112E51] transition-colors">Contact</button>
                 </div>
                 <p className="text-[13px]">© 2026 Arthurian AI Resume. All rights reserved.</p>
             </footer>
@@ -866,6 +919,47 @@ export function Home() {
                     </div>
                 )
             }
+
+            {/* Contact Modal */}
+            {showContactModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#112E51]/70 backdrop-blur-[4px] p-4">
+                    <div className="bg-white shadow-2xl rounded-2xl max-w-[460px] w-full overflow-hidden border border-[#29AEE1]/20">
+                        <div className="border-b border-gray-100 px-6 py-5 flex justify-between items-center bg-white">
+                            <h3 className="text-[17px] font-extrabold text-[#112E51] tracking-tight">Contact Arthurian</h3>
+                            <button
+                                onClick={() => setShowContactModal(false)}
+                                className="text-gray-400 hover:text-[#112E51] transition-colors p-1"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-[14px] text-[#556987] leading-relaxed mb-5">
+                                문의는 아래 이메일로 보내주세요.
+                            </p>
+                            <div className="bg-[#f8fbff] border border-blue-100 rounded-xl px-4 py-3 mb-5">
+                                <p className="text-[15px] font-extrabold text-[#112E51]">alstnwjd0424@gmail.com</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href="mailto:alstnwjd0424@gmail.com"
+                                    className="bg-[#29AEE1] hover:bg-[#1E95C3] text-white text-[14px] font-bold px-5 py-2.5 rounded-lg transition-all"
+                                >
+                                    Send Email
+                                </a>
+                                <button
+                                    onClick={() => setShowContactModal(false)}
+                                    className="bg-white border border-gray-300 text-[#556987] text-[14px] font-bold px-5 py-2.5 rounded-lg hover:bg-gray-50 transition-all"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }
