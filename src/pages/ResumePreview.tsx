@@ -214,6 +214,10 @@ function PayPalButtonsWrapper({ onApprove, onError }: {
     );
 }
 
+function sanitizePayPalClientId(value: unknown): string {
+    return String(value || 'test').replace(/\s+/g, '').trim();
+}
+
 export function ResumePreview() {
     const [resumeData, setResumeData] = useState<ResumeData | null>(null);
     const [rawText, setRawText] = useState<string | null>(null);
@@ -375,6 +379,7 @@ export function ResumePreview() {
     const displayData = resumeData || RESUME_PLACEHOLDER;
 
     const { personalInfo, education, experience, extracurricular, certifications, skills, keywords, selfIntroduction } = displayData;
+    const paypalClientId = sanitizePayPalClientId(import.meta.env.VITE_PAYPAL_CLIENT_ID);
 
     return (
         <div className="min-h-screen bg-[#F8F9FA] text-slate-900 p-6 pt-24 pb-32 font-sans print:p-0 print:bg-white print:pt-0">
@@ -705,7 +710,7 @@ export function ResumePreview() {
                                 </div>
                             </div>
                         ) : (
-                            <PayPalScriptProvider options={{ clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || "test", currency: "USD", components: "buttons" }}>
+                            <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD", components: "buttons" }}>
                                 <PayPalButtonsWrapper
                                     onApprove={(orderId) => processResumeGeneration(orderId)}
                                     onError={(err) => {
