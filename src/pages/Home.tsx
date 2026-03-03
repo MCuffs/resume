@@ -216,9 +216,9 @@ export function Home() {
                 setPaymentReference(result.requestId);
             }
             setConsultingStep('done');
-        } catch (error) {
+        } catch (error: any) {
             console.error("Submission failed", error);
-            setConsultingError("Failed to submit. Please try payment confirmation again.");
+            setConsultingError(error?.message || "Failed to submit. Please try payment confirmation again.");
         } finally {
             setConsultingLoading(false);
         }
