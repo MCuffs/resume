@@ -209,7 +209,12 @@ export function Home() {
                 result = null;
             }
             if (!response.ok || !result?.ok) {
-                throw new Error(result?.error || 'Failed to submit paid request');
+                const fallbackRaw = raw && raw.length < 300 ? raw : '';
+                throw new Error(
+                    result?.error ||
+                    fallbackRaw ||
+                    `Failed to submit paid request (HTTP ${response.status})`
+                );
             }
 
             if (result?.requestId) {
