@@ -493,9 +493,6 @@ export function Home() {
                             Check Announcements <span className="text-[#29AEE1] font-bold ml-1">&gt;</span>
                         </button>
                     </div>
-                    <p className="mt-4 text-[12px] md:text-[13px] text-[#556987] font-medium">
-                        We do not rely on a generic one-shot AI model. Built by a recruiter with 5 years in Korean hiring, our Korean-resume-trained AI is designed to maximize your pass rate.
-                    </p>
                 </div>
             </section >
 
