@@ -263,6 +263,14 @@ export function ResumePreview() {
         }
     }, [navigate]);
 
+    useEffect(() => {
+        return () => {
+            if (feedbackRevealTimerRef.current) {
+                window.clearTimeout(feedbackRevealTimerRef.current);
+            }
+        };
+    }, []);
+
     if (initState === 'checking') {
         return (
             <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center px-6">
@@ -350,14 +358,6 @@ export function ResumePreview() {
             setShowFeedbackPrompt(true);
         }, 5000);
     };
-
-    useEffect(() => {
-        return () => {
-            if (feedbackRevealTimerRef.current) {
-                window.clearTimeout(feedbackRevealTimerRef.current);
-            }
-        };
-    }, []);
 
     const toggleFeedbackIssue = (issue: string) => {
         setFeedbackIssues((prev) => {
