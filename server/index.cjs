@@ -13,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
+const consultingUpload = multer({ dest: 'uploads/', limits: { fileSize: 15 * 1024 * 1024 } });
 
 const supabaseAdminUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -199,6 +200,203 @@ function sanitizeIssues(value) {
     .filter((x) => x && ALLOWED_FEEDBACK_ISSUES.has(x))
     .slice(0, 5);
 }
+
+function sanitizeText(v, max = 2000) {
+  if (typeof v !== 'string') return '';
+  return v.trim().slice(0, max);
+}
+
+function buildSafeFileName(name) {
+  return String(name || 'resume.pdf')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(0, 120);
+}
+
+async function createSignedUrlSafe(bucket, storagePath, expiresInSec = 60 * 60 * 24 * 14) {
+  if (!storagePath) return null;
+  const { data, error } = await supabaseAdmin.storage.from(bucket).createSignedUrl(storagePath, expiresInSec);
+  if (error) return null;
+  return data?.signedUrl || null;
+}
+
+app.post('/api/consulting-request', consultingUpload.fields([
+  { name: 'englishResume', maxCount: 1 },
+  { name: 'koreanResume', maxCount: 1 },
+]), async (req, res) => {
+  const cleanup = () => {
+    const files = [
+      ...(req.files?.englishResume || []),
+      ...(req.files?.koreanResume || []),
+    ];
+    for (const file of files) {
+      try { fs.unlinkSync(file.path); } catch { }
+    }
+  };
+
+  try {
+    if (!supabaseAdmin) {
+      return res.status(500).json({ ok: false, error: 'Supabase admin is not configured' });
+    }
+
+    const englishResume = req.files?.englishResume?.[0];
+    const koreanResume = req.files?.koreanResume?.[0];
+    if (!englishResume || !koreanResume) {
+      cleanup();
+      return res.status(400).json({ ok: false, error: 'Both English and Korean resume PDFs are required' });
+    }
+
+    const service = sanitizeText(req.body?.service, 120);
+    const servicePrice = sanitizeText(req.body?.servicePrice, 40);
+    const name = sanitizeText(req.body?.name, 120);
+    const email = sanitizeText(req.body?.email, 180);
+    const targetCompany = sanitizeText(req.body?.targetCompany, 200);
+    const brief = sanitizeText(req.body?.brief, 4000);
+    const paymentReference = sanitizeText(req.body?.paymentReference, 120);
+    if (!service || !name || !email || !targetCompany || !brief) {
+      cleanup();
+      return res.status(400).json({ ok: false, error: 'Missing required fields' });
+    }
+
+    const requestId = `CONSULT-${Date.now()}`;
+    const bucket = process.env.SUPABASE_CONSULTING_BUCKET || 'consulting-resumes';
+    const { data: existingBucket } = await supabaseAdmin.storage.getBucket(bucket);
+    if (!existingBucket) {
+      const { error: bucketErr } = await supabaseAdmin.storage.createBucket(bucket, { public: false });
+      if (bucketErr && !String(bucketErr.message || '').toLowerCase().includes('already exists')) {
+        throw new Error(`Failed to create storage bucket: ${bucketErr.message}`);
+      }
+    }
+    const now = new Date();
+    const basePath = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${requestId}`;
+
+    const uploadFile = async (file, label) => {
+      const safeName = `${label}_${buildSafeFileName(file.originalname)}`;
+      const storagePath = `${basePath}/${safeName}`;
+      const fileBuffer = fs.readFileSync(file.path);
+      const { error: uploadErr } = await supabaseAdmin.storage.from(bucket).upload(storagePath, fileBuffer, {
+        contentType: file.mimetype || 'application/pdf',
+        upsert: false,
+      });
+      if (uploadErr) throw new Error(`Failed to upload ${label} resume: ${uploadErr.message}`);
+
+      const { data: signed, error: signErr } = await supabaseAdmin.storage.from(bucket).createSignedUrl(storagePath, 60 * 60 * 24 * 14);
+      if (signErr) throw new Error(`Failed to sign ${label} resume: ${signErr.message}`);
+
+      return {
+        fileName: file.originalname,
+        size: file.size,
+        storagePath,
+        signedUrl: signed?.signedUrl || null,
+      };
+    };
+
+    const englishFile = await uploadFile(englishResume, 'english');
+    const koreanFile = await uploadFile(koreanResume, 'korean');
+    cleanup();
+
+    const readablePayload = {
+      requestId,
+      service,
+      servicePrice,
+      applicant: { name, email, targetCompany },
+      clientNotes: brief,
+      paymentReference: paymentReference || null,
+      files: {
+        englishResume: englishFile,
+        koreanResume: koreanFile,
+      },
+      submittedAt: new Date().toISOString(),
+    };
+
+    const { error: insertErr } = await supabaseAdmin.from('consulting_requests').insert({
+      request_id: requestId,
+      service,
+      service_price: servicePrice,
+      applicant_name: name,
+      applicant_email: email,
+      target_company: targetCompany,
+      client_notes: brief,
+      payment_reference: paymentReference || null,
+      payment_status: 'paid_submitted',
+      english_file_name: englishFile.fileName,
+      english_file_size: englishFile.size,
+      english_storage_path: englishFile.storagePath,
+      korean_file_name: koreanFile.fileName,
+      korean_file_size: koreanFile.size,
+      korean_storage_path: koreanFile.storagePath,
+    });
+    if (insertErr) {
+      throw new Error(`Database insert failed: ${insertErr.message}`);
+    }
+
+    const webhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL || process.env.VITE_GOOGLE_SHEET_WEBHOOK_URL;
+    if (webhookUrl) {
+      try {
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(readablePayload),
+        });
+      } catch (err) {
+        console.error('consulting webhook send failed:', err);
+      }
+    }
+
+    return res.status(200).json({ ok: true, requestId, files: readablePayload.files });
+  } catch (error) {
+    cleanup();
+    console.error('Error in /api/consulting-request:', error);
+    return res.status(500).json({ ok: false, error: error?.message || 'Failed to process consulting request' });
+  }
+});
+
+app.get('/api/consulting-requests', async (req, res) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(500).json({ ok: false, error: 'Supabase admin is not configured' });
+    }
+
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const bucket = process.env.SUPABASE_CONSULTING_BUCKET || 'consulting-resumes';
+    const { data, error } = await supabaseAdmin
+      .from('consulting_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Failed to load consulting requests: ${error.message}`);
+    }
+
+    const rows = [];
+    for (const row of data || []) {
+      rows.push({
+        id: row.id,
+        requestId: row.request_id,
+        createdAt: row.created_at,
+        service: row.service,
+        servicePrice: row.service_price,
+        applicantName: row.applicant_name,
+        applicantEmail: row.applicant_email,
+        targetCompany: row.target_company,
+        clientNotes: row.client_notes,
+        paymentReference: row.payment_reference,
+        paymentStatus: row.payment_status,
+        englishFileName: row.english_file_name,
+        englishFileSize: row.english_file_size,
+        englishUrl: await createSignedUrlSafe(bucket, row.english_storage_path),
+        koreanFileName: row.korean_file_name,
+        koreanFileSize: row.korean_file_size,
+        koreanUrl: await createSignedUrlSafe(bucket, row.korean_storage_path),
+      });
+    }
+
+    return res.status(200).json({ ok: true, items: rows });
+  } catch (error) {
+    console.error('Error in /api/consulting-requests:', error);
+    return res.status(500).json({ ok: false, error: error?.message || 'Failed to load consulting requests' });
+  }
+});
 
 app.post('/api/public/resume-feedback', async (req, res) => {
   try {

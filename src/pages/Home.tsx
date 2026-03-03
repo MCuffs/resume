@@ -7,7 +7,13 @@ export function Home() {
     const [errorMSG, setErrorMSG] = useState('');
     const [showConsultingModal, setShowConsultingModal] = useState(false);
     const [selectedService, setSelectedService] = useState('');
-    const [formData, setFormData] = useState({ name: '', email: '', targetCompany: '' });
+    const [selectedServicePrice, setSelectedServicePrice] = useState('');
+    const [formData, setFormData] = useState({ name: '', email: '', targetCompany: '', brief: '' });
+    const [englishResumeFile, setEnglishResumeFile] = useState<File | null>(null);
+    const [koreanResumeFile, setKoreanResumeFile] = useState<File | null>(null);
+    const [consultingStep, setConsultingStep] = useState<'intake' | 'payment' | 'done'>('intake');
+    const [paymentReference, setPaymentReference] = useState('');
+    const [consultingError, setConsultingError] = useState('');
     const [consultingLoading, setConsultingLoading] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const navigate = useNavigate();
@@ -65,47 +71,82 @@ export function Home() {
         }
     };
 
-    const openPaymentModal = (serviceType: string) => {
+    const resetConsultingFlow = () => {
+        setShowConsultingModal(false);
+        setSelectedService('');
+        setSelectedServicePrice('');
+        setFormData({ name: '', email: '', targetCompany: '', brief: '' });
+        setEnglishResumeFile(null);
+        setKoreanResumeFile(null);
+        setConsultingStep('intake');
+        setPaymentReference('');
+        setConsultingError('');
+        setConsultingLoading(false);
+    };
+
+    const openPaymentModal = (serviceType: string, servicePrice: string) => {
         setSelectedService(serviceType);
+        setSelectedServicePrice(servicePrice);
+        setConsultingStep('intake');
+        setEnglishResumeFile(null);
+        setKoreanResumeFile(null);
+        setPaymentReference('');
+        setConsultingError('');
         setShowConsultingModal(true);
     };
 
     const handleConsultingSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        const webhookUrl = import.meta.env.VITE_GOOGLE_SHEET_WEBHOOK_URL;
-
-        if (!webhookUrl) {
-            console.warn("Webhook URL missing! Simulated Submission:", { service: selectedService, ...formData });
-            alert(`[Simulation Mode] Application sent!\n(Add VITE_GOOGLE_SHEET_WEBHOOK_URL to .env to connect real DB)`);
-            setShowConsultingModal(false);
-            setFormData({ name: '', email: '', targetCompany: '' });
+        if (!englishResumeFile || !koreanResumeFile) {
+            setConsultingError('Please attach both English and Korean resume PDFs.');
             return;
         }
+        if (!formData.brief.trim()) {
+            setConsultingError('Please add your request details before continuing.');
+            return;
+        }
+        setConsultingError('');
+        setConsultingStep('payment');
+    };
 
+    const handleConsultingPaymentComplete = async () => {
         setConsultingLoading(true);
+        setConsultingError('');
         try {
-            await fetch(webhookUrl, {
+            const requestData = new FormData();
+            requestData.append('service', selectedService);
+            requestData.append('servicePrice', selectedServicePrice);
+            requestData.append('name', formData.name);
+            requestData.append('email', formData.email);
+            requestData.append('targetCompany', formData.targetCompany);
+            requestData.append('brief', formData.brief);
+            requestData.append('paymentReference', paymentReference || '');
+            requestData.append('englishResume', englishResumeFile as File);
+            requestData.append('koreanResume', koreanResumeFile as File);
+
+            const response = await fetch('/api/consulting-request', {
                 method: 'POST',
-                mode: 'no-cors', // Avoid CORS preflight issues with standard Google Apps Script
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    service: selectedService,
-                    name: formData.name,
-                    email: formData.email,
-                    targetCompany: formData.targetCompany,
-                    timestamp: new Date().toISOString()
-                })
+                body: requestData
             });
 
-            alert(`Application sent successfully!\nOur expert will contact you at ${formData.email} within 24 hours.`);
-            setShowConsultingModal(false);
-            setFormData({ name: '', email: '', targetCompany: '' });
+            const raw = await response.text();
+            let result: any = null;
+            try {
+                result = raw ? JSON.parse(raw) : null;
+            } catch {
+                result = null;
+            }
+            if (!response.ok || !result?.ok) {
+                throw new Error(result?.error || 'Failed to submit paid request');
+            }
+
+            if (result?.requestId) {
+                setPaymentReference(result.requestId);
+            }
+            setConsultingStep('done');
         } catch (error) {
             console.error("Submission failed", error);
-            alert("Failed to submit the form. Please try again later.");
+            setConsultingError("Failed to submit. Please try payment confirmation again.");
         } finally {
             setConsultingLoading(false);
         }
@@ -410,7 +451,7 @@ export function Home() {
                             </div>
                             <div>
                                 <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩29,000</div>
-                                <button className="w-full bg-[#112E51] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#0a1e36] transition-colors" onClick={() => openPaymentModal('Korean Resume Review (₩29,000)')}>
+                                <button className="w-full bg-[#112E51] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#0a1e36] transition-colors" onClick={() => openPaymentModal('Korean Resume Review', '₩29,000')}>
                                     Inquire Now
                                 </button>
                             </div>
@@ -429,7 +470,7 @@ export function Home() {
                             </div>
                             <div className="relative z-10">
                                 <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩69,000</div>
-                                <button className="w-full bg-[#29AEE1] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#1f9bc9] transition-colors" onClick={() => openPaymentModal('Custom Interview Questions (₩69,000)')}>
+                                <button className="w-full bg-[#29AEE1] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#1f9bc9] transition-colors" onClick={() => openPaymentModal('Custom Interview Questions', '₩69,000')}>
                                     Inquire Now
                                 </button>
                             </div>
@@ -447,17 +488,22 @@ export function Home() {
             {
                 showConsultingModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#112E51]/70 backdrop-blur-[4px] p-4">
-                        <div className="bg-white shadow-2xl rounded-2xl max-w-[480px] w-full overflow-hidden border border-[#29AEE1]/20">
+                        <div className="bg-white shadow-2xl rounded-2xl max-w-[560px] w-full overflow-hidden border border-[#29AEE1]/20">
 
                             <div className="border-b border-gray-100 px-6 py-5 flex justify-between items-center bg-white">
                                 <div className="flex items-center gap-3">
                                     <svg className="w-5 h-5 text-[#29AEE1]" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                                     </svg>
-                                    <h3 className="text-[17px] font-extrabold text-[#112E51] tracking-tight">{selectedService}</h3>
+                                    <div>
+                                        <h3 className="text-[17px] font-extrabold text-[#112E51] tracking-tight">{selectedService}</h3>
+                                        <p className="text-[12px] text-[#556987] font-semibold mt-0.5">
+                                            Step {consultingStep === 'intake' ? '1' : consultingStep === 'payment' ? '2' : '3'} of 3
+                                        </p>
+                                    </div>
                                 </div>
                                 <button
-                                    onClick={() => setShowConsultingModal(false)}
+                                    onClick={resetConsultingFlow}
                                     className="text-gray-400 hover:text-[#112E51] transition-colors p-1"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -467,70 +513,194 @@ export function Home() {
                             </div>
 
                             <div className="p-8">
-                                <p className="text-[14px] text-[#556987] mb-8 leading-relaxed font-medium bg-[#f0f9ff] border border-[#bae6fd] p-4 rounded-xl text-blue-900 shadow-inner">
-                                    Please submit your details below to request this service. Our team will review your inquiry and email you a secure payment link to proceed.
-                                </p>
+                                {consultingStep === 'intake' && (
+                                    <>
+                                        <p className="text-[14px] text-[#556987] mb-8 leading-relaxed font-medium bg-[#f0f9ff] border border-[#bae6fd] p-4 rounded-xl text-blue-900 shadow-inner">
+                                            Submit your details and attach your current resume PDF first. Then continue directly to payment.
+                                        </p>
 
-                                <form onSubmit={handleConsultingSubmit} className="space-y-5">
-                                    <div>
-                                        <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">User Handle (Name)</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3.5 text-[15px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
-                                            placeholder="John Doe"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Primary Email</label>
-                                        <input
-                                            type="email"
-                                            required
-                                            value={formData.email}
-                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3.5 text-[15px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
-                                            placeholder="abc@example.com"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Target Organization</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={formData.targetCompany}
-                                            onChange={(e) => setFormData({ ...formData, targetCompany: e.target.value })}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3.5 text-[15px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
-                                            placeholder="Samsung, Kakao, Tech..."
-                                        />
-                                    </div>
+                                        <form onSubmit={handleConsultingSubmit} className="space-y-5">
+                                            <div>
+                                                <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">User Handle (Name)</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={formData.name}
+                                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                    className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3.5 text-[15px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
+                                                    placeholder="John Doe"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Primary Email</label>
+                                                <input
+                                                    type="email"
+                                                    required
+                                                    value={formData.email}
+                                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                    className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3.5 text-[15px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
+                                                    placeholder="abc@example.com"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Target Organization</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={formData.targetCompany}
+                                                    onChange={(e) => setFormData({ ...formData, targetCompany: e.target.value })}
+                                                    className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3.5 text-[15px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
+                                                    placeholder="Samsung, Kakao, Tech..."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Request Details (Required)</label>
+                                                <textarea
+                                                    required
+                                                    value={formData.brief}
+                                                    onChange={(e) => setFormData({ ...formData, brief: e.target.value })}
+                                                    className="w-full min-h-[110px] bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
+                                                    placeholder="Tell us what you want: target role, timeline, pain points, and expected output."
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">English Resume PDF (Required)</label>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    required
+                                                    onChange={(e) => setEnglishResumeFile(e.target.files?.[0] || null)}
+                                                    className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm file:mr-3 file:px-3 file:py-2 file:border-0 file:rounded-lg file:bg-[#29AEE1] file:text-white file:font-semibold hover:file:bg-[#1E95C3]"
+                                                />
+                                                {englishResumeFile && (
+                                                    <p className="mt-2 text-[12px] text-[#556987] font-medium">
+                                                        Attached: {englishResumeFile.name} ({(englishResumeFile.size / 1024).toFixed(1)} KB)
+                                                    </p>
+                                                )}
+                                            </div>
 
-                                    <div className="pt-6 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 w-full">
+                                            <div>
+                                                <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Korean Resume PDF (Required)</label>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    required
+                                                    onChange={(e) => setKoreanResumeFile(e.target.files?.[0] || null)}
+                                                    className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm file:mr-3 file:px-3 file:py-2 file:border-0 file:rounded-lg file:bg-[#29AEE1] file:text-white file:font-semibold hover:file:bg-[#1E95C3]"
+                                                />
+                                                {koreanResumeFile && (
+                                                    <p className="mt-2 text-[12px] text-[#556987] font-medium">
+                                                        Attached: {koreanResumeFile.name} ({(koreanResumeFile.size / 1024).toFixed(1)} KB)
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {consultingError && <p className="text-red-500 text-[13px] font-semibold">{consultingError}</p>}
+
+                                            <div className="pt-4 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 w-full">
+                                                <button
+                                                    type="button"
+                                                    onClick={resetConsultingFlow}
+                                                    className="w-full sm:w-auto px-6 py-3.5 text-[15px] font-bold text-[#556987] hover:text-[#112E51] transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    className="w-full sm:w-auto bg-[#29AEE1] hover:bg-[#1E95C3] text-white text-[15px] font-bold px-8 py-3.5 rounded-full transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 min-w-[180px]"
+                                                >
+                                                    Continue to Payment
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </>
+                                )}
+
+                                {consultingStep === 'payment' && (
+                                    <>
+                                        <div className="bg-[#f8fbff] border border-blue-100 p-4 rounded-xl mb-6">
+                                            <p className="text-[13px] font-bold text-[#112E51] mb-1">Request Summary</p>
+                                            <p className="text-[14px] text-[#556987]">{selectedService}</p>
+                                            <p className="text-[14px] text-[#556987]">Applicant: {formData.name} ({formData.email})</p>
+                                            <p className="text-[14px] text-[#556987]">Target: {formData.targetCompany}</p>
+                                            <p className="text-[14px] text-[#556987]">Request: {formData.brief}</p>
+                                            <p className="text-[14px] text-[#556987]">English PDF: {englishResumeFile?.name || 'Not attached'}</p>
+                                            <p className="text-[14px] text-[#556987]">Korean PDF: {koreanResumeFile?.name || 'Not attached'}</p>
+                                        </div>
+
+                                        <div className="bg-white border border-[#29AEE1]/20 rounded-xl p-5 mb-6">
+                                            <p className="text-[13px] font-bold text-[#556987] uppercase tracking-wide mb-2">Pay to start</p>
+                                            <div className="text-[34px] leading-none font-extrabold text-[#29AEE1] mb-3">{selectedServicePrice}</div>
+                                            <p className="text-[13px] text-[#556987]">
+                                                Replace this section with your real checkout integration (PayPal/Stripe). For now, this is a local flow prototype.
+                                            </p>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Payment Reference (Optional)</label>
+                                            <input
+                                                type="text"
+                                                value={paymentReference}
+                                                onChange={(e) => setPaymentReference(e.target.value)}
+                                                className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
+                                                placeholder="e.g. PAYPAL-ORDER-ID-1234"
+                                            />
+                                        </div>
+
+                                        {consultingError && <p className="text-red-500 text-[13px] font-semibold mb-3">{consultingError}</p>}
+
+                                        <div className="pt-2 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 w-full">
+                                            <button
+                                                type="button"
+                                                onClick={() => setConsultingStep('intake')}
+                                                className="w-full sm:w-auto px-6 py-3.5 text-[15px] font-bold text-[#556987] hover:text-[#112E51] transition-colors"
+                                            >
+                                                Back
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleConsultingPaymentComplete}
+                                                disabled={consultingLoading}
+                                                className="w-full sm:w-auto bg-[#29AEE1] hover:bg-[#1E95C3] text-white text-[15px] font-bold px-8 py-3.5 rounded-full transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed min-w-[180px]"
+                                            >
+                                                {consultingLoading ? 'Confirming...' : 'I Paid - Submit Request'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+
+                                {consultingStep === 'done' && (
+                                    <div className="text-center">
+                                        <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center mb-4">
+                                            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <h4 className="text-[22px] font-extrabold text-[#112E51] mb-2">Request Received</h4>
+                                        <p className="text-[14px] text-[#556987] leading-relaxed mb-6">
+                                            Your paid request has been submitted with your profile and PDF. We will review and contact you at <strong>{formData.email}</strong>.
+                                        </p>
+                                        {paymentReference && (
+                                            <p className="text-[13px] text-[#112E51] font-bold mb-4">
+                                                Request ID: {paymentReference}
+                                            </p>
+                                        )}
                                         <button
                                             type="button"
-                                            onClick={() => setShowConsultingModal(false)}
-                                            className="w-full sm:w-auto px-6 py-3.5 text-[15px] font-bold text-[#556987] hover:text-[#112E51] transition-colors"
+                                            onClick={resetConsultingFlow}
+                                            className="bg-[#29AEE1] hover:bg-[#1E95C3] text-white text-[15px] font-bold px-8 py-3.5 rounded-full transition-all shadow-lg"
                                         >
-                                            Cancel
+                                            Close
                                         </button>
                                         <button
-                                            type="submit"
-                                            disabled={consultingLoading}
-                                            className="w-full sm:w-auto bg-[#29AEE1] hover:bg-[#1E95C3] text-white text-[15px] font-bold px-8 py-3.5 rounded-full transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[160px]"
+                                            type="button"
+                                            onClick={() => window.open('/dashboard/consulting', '_blank')}
+                                            className="ml-3 bg-white border border-[#29AEE1] text-[#29AEE1] text-[15px] font-bold px-8 py-3.5 rounded-full transition-all"
                                         >
-                                            {consultingLoading ? (
-                                                <span className="flex items-center gap-2">
-                                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                    </svg>
-                                                    {consultingLoading ? 'Processing...' : 'Submit Inquiry'}
-                                                </span>
-                                            ) : 'Submit Inquiry'}
+                                            Open Dashboard
                                         </button>
                                     </div>
-                                </form>
+                                )}
                             </div>
                         </div>
                     </div>

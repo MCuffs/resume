@@ -7,20 +7,16 @@ export default defineConfig({
     server: {
         host: true,
         proxy: {
-            // Proxy API calls to the local Express backend (server/index.cjs running on port 3001)
-            '/api/parse-resume': {
-                target: 'http://localhost:3001',
-                changeOrigin: true,
-            },
-            '/api/generate-resume': {
-                target: 'http://localhost:3001',
-                changeOrigin: true,
-            },
             // Keep the Threads API proxy
             '/api/threads': {
                 target: 'https://graph.threads.net',
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/api\/threads/, ''),
+            },
+            // Proxy all other API calls to the local Express backend (server/index.cjs on port 3001)
+            '/api': {
+                target: 'http://localhost:3001',
+                changeOrigin: true,
             },
         },
     },
