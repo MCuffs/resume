@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PayPalScriptProvider, PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
 
@@ -232,6 +232,8 @@ export function ResumePreview() {
     const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
     const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
     const [feedbackError, setFeedbackError] = useState('');
+    const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
+    const feedbackRevealTimerRef = useRef<number | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -341,7 +343,21 @@ export function ResumePreview() {
 
     const handlePrint = () => {
         window.print();
+        if (feedbackRevealTimerRef.current) {
+            window.clearTimeout(feedbackRevealTimerRef.current);
+        }
+        feedbackRevealTimerRef.current = window.setTimeout(() => {
+            setShowFeedbackPrompt(true);
+        }, 5000);
     };
+
+    useEffect(() => {
+        return () => {
+            if (feedbackRevealTimerRef.current) {
+                window.clearTimeout(feedbackRevealTimerRef.current);
+            }
+        };
+    }, []);
 
     const toggleFeedbackIssue = (issue: string) => {
         setFeedbackIssues((prev) => {
@@ -390,6 +406,9 @@ export function ResumePreview() {
                 throw new Error(message);
             }
             setFeedbackSubmitted(true);
+            window.setTimeout(() => {
+                navigate('/', { replace: true });
+            }, 1200);
         } catch (err: any) {
             setFeedbackError(err.message || 'Failed to submit feedback');
         } finally {
@@ -436,78 +455,6 @@ export function ResumePreview() {
                         </div>
                     )}
                 </div>
-
-                {isUnlocked && (
-                    <div className="w-full mb-6 print:hidden">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                            <p className="text-slate-900 font-extrabold text-[16px] mb-2">How was this resume output?</p>
-                            <p className="text-slate-500 text-[13px] mb-4">Your feedback trains quality improvements for future generations.</p>
-
-                            {feedbackSubmitted ? (
-                                <div className="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-[13px] font-semibold">
-                                    Thank you. Your feedback was saved.
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex flex-wrap gap-2">
-                                        {[5, 4, 3, 2, 1].map((r) => (
-                                            <button
-                                                key={r}
-                                                onClick={() => setFeedbackRating(r)}
-                                                className={`px-3 py-2 rounded-lg text-[13px] font-bold border ${feedbackRating === r
-                                                    ? 'bg-blue-600 text-white border-blue-600'
-                                                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-                                                    }`}
-                                            >
-                                                {r} / 5
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2">
-                                        {[
-                                            ['tone', 'Tone mismatch'],
-                                            ['accuracy', 'Not accurate'],
-                                            ['missing_keywords', 'Missing keywords'],
-                                            ['format', 'Format issue'],
-                                            ['too_generic', 'Too generic'],
-                                            ['grammar', 'Grammar awkward'],
-                                            ['other', 'Other'],
-                                        ].map(([value, label]) => (
-                                            <button
-                                                key={value}
-                                                onClick={() => toggleFeedbackIssue(value)}
-                                                className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${feedbackIssues.includes(value)
-                                                    ? 'bg-slate-900 text-white border-slate-900'
-                                                    : 'bg-white text-slate-600 border-slate-300'
-                                                    }`}
-                                            >
-                                                {label}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    <textarea
-                                        value={feedbackComment}
-                                        onChange={(e) => setFeedbackComment(e.target.value)}
-                                        placeholder="Optional: tell us what should be improved."
-                                        className="w-full min-h-[88px] border border-slate-300 rounded-xl px-3 py-2 text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                    />
-
-                                    {feedbackError && <p className="text-red-500 text-[12px] font-semibold">{feedbackError}</p>}
-
-                                    <button
-                                        onClick={submitFeedback}
-                                        disabled={feedbackSubmitting}
-                                        className="bg-slate-900 text-white px-4 py-2 rounded-lg text-[13px] font-bold disabled:opacity-60"
-                                    >
-                                        {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
 
                 {/* Resume Container */}
                 <div className="w-full bg-white text-slate-900 px-10 py-16 sm:px-16 sm:py-20 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.05)] border border-slate-100 relative rounded-2xl print:shadow-none print:p-8 print:border-none print:w-full print:rounded-none">
@@ -741,6 +688,78 @@ export function ResumePreview() {
                                     }}
                                 />
                             </PayPalScriptProvider>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {isUnlocked && showFeedbackPrompt && (
+                <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm print:hidden p-4 flex items-center justify-center">
+                    <div className="w-full max-w-[980px] bg-white rounded-2xl border border-slate-200 p-6 shadow-2xl">
+                        <p className="text-slate-900 font-extrabold text-[28px] mb-2">How was this resume output?</p>
+                        <p className="text-slate-500 text-[14px] mb-5">Thanks for downloading. Submit quick feedback and we will take you back to Home.</p>
+
+                        {feedbackSubmitted ? (
+                            <div className="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-4 text-[14px] font-semibold">
+                                Thank you. Your feedback was saved. Redirecting to Home...
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="flex flex-wrap gap-2">
+                                    {[5, 4, 3, 2, 1].map((r) => (
+                                        <button
+                                            key={r}
+                                            onClick={() => setFeedbackRating(r)}
+                                            className={`px-3 py-2 rounded-lg text-[13px] font-bold border ${feedbackRating === r
+                                                ? 'bg-blue-600 text-white border-blue-600'
+                                                : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                                                }`}
+                                        >
+                                            {r} / 5
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                    {[
+                                        ['tone', 'Tone mismatch'],
+                                        ['accuracy', 'Not accurate'],
+                                        ['missing_keywords', 'Missing keywords'],
+                                        ['format', 'Format issue'],
+                                        ['too_generic', 'Too generic'],
+                                        ['grammar', 'Grammar awkward'],
+                                        ['other', 'Other'],
+                                    ].map(([value, label]) => (
+                                        <button
+                                            key={value}
+                                            onClick={() => toggleFeedbackIssue(value)}
+                                            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${feedbackIssues.includes(value)
+                                                ? 'bg-slate-900 text-white border-slate-900'
+                                                : 'bg-white text-slate-600 border-slate-300'
+                                                }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <textarea
+                                    value={feedbackComment}
+                                    onChange={(e) => setFeedbackComment(e.target.value)}
+                                    placeholder="Optional: tell us what should be improved."
+                                    className="w-full min-h-[110px] border border-slate-300 rounded-xl px-3 py-2 text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                />
+
+                                {feedbackError && <p className="text-red-500 text-[12px] font-semibold">{feedbackError}</p>}
+
+                                <button
+                                    onClick={submitFeedback}
+                                    disabled={feedbackSubmitting}
+                                    className="bg-slate-900 text-white px-4 py-2 rounded-lg text-[13px] font-bold disabled:opacity-60"
+                                >
+                                    {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
