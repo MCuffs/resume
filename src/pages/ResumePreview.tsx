@@ -233,7 +233,10 @@ export function ResumePreview() {
     const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
     const [feedbackError, setFeedbackError] = useState('');
     const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
+    const [isCountdownActive, setIsCountdownActive] = useState(false);
+    const [countdownSeconds, setCountdownSeconds] = useState(0);
     const feedbackRevealTimerRef = useRef<number | null>(null);
+    const feedbackCountdownIntervalRef = useRef<number | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -267,6 +270,9 @@ export function ResumePreview() {
         return () => {
             if (feedbackRevealTimerRef.current) {
                 window.clearTimeout(feedbackRevealTimerRef.current);
+            }
+            if (feedbackCountdownIntervalRef.current) {
+                window.clearInterval(feedbackCountdownIntervalRef.current);
             }
         };
     }, []);
@@ -354,9 +360,34 @@ export function ResumePreview() {
         if (feedbackRevealTimerRef.current) {
             window.clearTimeout(feedbackRevealTimerRef.current);
         }
+        if (feedbackCountdownIntervalRef.current) {
+            window.clearInterval(feedbackCountdownIntervalRef.current);
+        }
+        setShowFeedbackPrompt(false);
+        setIsCountdownActive(true);
+        setCountdownSeconds(7);
+
+        feedbackCountdownIntervalRef.current = window.setInterval(() => {
+            setCountdownSeconds((prev) => {
+                if (prev <= 1) {
+                    if (feedbackCountdownIntervalRef.current) {
+                        window.clearInterval(feedbackCountdownIntervalRef.current);
+                        feedbackCountdownIntervalRef.current = null;
+                    }
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
         feedbackRevealTimerRef.current = window.setTimeout(() => {
+            if (feedbackCountdownIntervalRef.current) {
+                window.clearInterval(feedbackCountdownIntervalRef.current);
+                feedbackCountdownIntervalRef.current = null;
+            }
+            setIsCountdownActive(false);
             setShowFeedbackPrompt(true);
-        }, 5000);
+        }, 7000);
     };
 
     const toggleFeedbackIssue = (issue: string) => {
@@ -761,6 +792,16 @@ export function ResumePreview() {
                                 </button>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {isUnlocked && isCountdownActive && !showFeedbackPrompt && (
+                <div className="fixed inset-0 z-[69] bg-slate-900/35 backdrop-blur-[2px] print:hidden p-4 flex items-center justify-center">
+                    <div className="bg-white border border-slate-200 rounded-2xl px-8 py-7 text-center shadow-2xl">
+                        <p className="text-slate-900 font-extrabold text-2xl mb-2">Moving to feedback</p>
+                        <p className="text-slate-500 text-sm mb-4">Please share quick feedback after download.</p>
+                        <div className="text-blue-600 font-black text-4xl leading-none">{countdownSeconds}</div>
                     </div>
                 </div>
             )}
