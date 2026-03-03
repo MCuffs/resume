@@ -400,8 +400,8 @@ export function Home() {
                                 </p>
                             </div>
                             <div>
-                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩10,900</div>
-                                <button className="w-full bg-[#112E51] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#0a1e36] transition-colors" onClick={() => openPaymentModal('Korean Resume Review (₩10,900)')}>
+                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩29,000</div>
+                                <button className="w-full bg-[#112E51] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#0a1e36] transition-colors" onClick={() => openPaymentModal('Korean Resume Review (₩29,000)')}>
                                     Inquire Now
                                 </button>
                             </div>
@@ -419,8 +419,8 @@ export function Home() {
                                 </p>
                             </div>
                             <div className="relative z-10">
-                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩39,000</div>
-                                <button className="w-full bg-[#29AEE1] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#1f9bc9] transition-colors" onClick={() => openPaymentModal('Custom Interview Questions (₩39,000)')}>
+                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩69,000</div>
+                                <button className="w-full bg-[#29AEE1] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#1f9bc9] transition-colors" onClick={() => openPaymentModal('Custom Interview Questions (₩69,000)')}>
                                     Inquire Now
                                 </button>
                             </div>

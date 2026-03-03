@@ -32,7 +32,7 @@ function PayPalButtonsWrapper({ onApprove, onError }: {
                     className="w-full h-12 bg-[#0070ba] hover:bg-[#003087] text-white font-bold rounded-lg flex items-center justify-center gap-2 transition-colors text-[15px]"
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M7.144 19.532l1.049-5.751c.11-.605-.119-.731-.614-.761L6 12.882l.321-1.826 4.614-.05c.88.029 1.15-.266 1.05-.916l-.368-2.4c-.3-1.993-1.52-2.59-3.7-2.59H5.18L3 17.712h4.144v1.82zm9.892-13.58l-.29 1.608c-.085.46.062.696.572.696h2.053c.695 0 1.194.14 1.498.415.305.274.426.703.363 1.285h-2.22c-.557 0-.958.148-1.2.446-.244.298-.298.72-.162 1.268l.567 2.214c.273 1.063 1.254 1.594 2.944 1.594h1.668l-.294 1.758H19.86c-2.48 0-4.054-1.127-4.724-3.38l-.577-2.125c-.343-1.268-.066-2.274.828-3.018.895-.744 2.11-1.116 3.649-1.116h1.4c.27 0 .5.042.688.127z" /></svg>
-                    Pay $2.99 with PayPal
+                    Pay $3.99 with PayPal
                 </button>
             </div>
         );
@@ -46,7 +46,7 @@ function PayPalButtonsWrapper({ onApprove, onError }: {
                     intent: "CAPTURE",
                     purchase_units: [{
                         description: "Premium Korean Resume Unlock",
-                        amount: { currency_code: "USD", value: "2.99" }
+                        amount: { currency_code: "USD", value: "3.99" }
                     }]
                 });
             }}
@@ -391,8 +391,8 @@ export function ResumePreview() {
                                 <p className="text-slate-500 text-[13px]">AI-generated, HR-compliant Korean format</p>
                             </div>
                             <div className="text-right">
-                                <p className="font-extrabold text-[#29AEE1] text-[22px]">$2.99 USD</p>
-                                <p className="text-slate-400 text-[12px]">≈ 3,900 KRW</p>
+                                <p className="font-extrabold text-[#29AEE1] text-[22px]">₩4,900</p>
+                                <p className="text-slate-400 text-[12px]">≈ $3.99 USD</p>
                             </div>
                         </div>
                         {isGenerating ? (
