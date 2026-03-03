@@ -361,7 +361,7 @@ export function ResumePreview() {
         setFeedbackError('');
         try {
             const sessionId = localStorage.getItem('sessionId');
-            const response = await fetch('/api/public/resume-feedback', {
+            const response = await fetch('/api/resume-feedback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
