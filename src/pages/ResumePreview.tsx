@@ -217,6 +217,7 @@ function PayPalButtonsWrapper({ onApprove, onError }: {
 export function ResumePreview() {
     const [resumeData, setResumeData] = useState<ResumeData | null>(null);
     const [rawText, setRawText] = useState<string | null>(null);
+    const [initState, setInitState] = useState<'checking' | 'ready' | 'missing'>('checking');
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [errorMSG, setErrorMSG] = useState('');
@@ -237,23 +238,49 @@ export function ResumePreview() {
             if (parsedDataStr) {
                 // If the user clicked "View Demo", parsedResume is already injected.
                 setResumeData(normalizeResumeData(JSON.parse(parsedDataStr)));
+                setInitState('ready');
                 // Optionally start unlocked, or keep locked for demo purposes.
                 // Keeping it locked to demonstrate the lock screen
             } else if (rawTextStr) {
                 // This is a real user upload. We have raw text, but no AI generated data yet.
                 setRawText(rawTextStr);
+                setInitState('ready');
             } else {
-                // No data found, navigate back
-                navigate('/');
+                // No data found, navigate back and show fallback (prevents white screen)
+                setInitState('missing');
+                navigate('/', { replace: true });
             }
         } catch (e) {
             console.error(e);
-            navigate('/');
+            setInitState('missing');
+            navigate('/', { replace: true });
         }
     }, [navigate]);
 
-    // If neither demo data nor raw text is present, don't render.
-    if (!resumeData && !rawText) return null;
+    if (initState === 'checking') {
+        return (
+            <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center px-6">
+                <div className="text-slate-600 text-sm font-semibold">Preparing preview...</div>
+            </div>
+        );
+    }
+
+    if (initState === 'missing') {
+        return (
+            <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center px-6">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full text-center shadow-sm">
+                    <h2 className="text-slate-900 font-extrabold text-xl mb-2">No resume session found</h2>
+                    <p className="text-slate-500 text-sm mb-5">Please upload your PDF on the home page first.</p>
+                    <button
+                        onClick={() => navigate('/', { replace: true })}
+                        className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                    >
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     const processResumeGeneration = async (orderId?: string) => {
         if (resumeData) {
