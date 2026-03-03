@@ -2,6 +2,159 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PayPalScriptProvider, PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
 
+type ResumeData = {
+    personalInfo: {
+        name: string;
+        gender: string;
+        birthYear: string;
+        phone: string;
+        email: string;
+        address: string;
+        summary: string;
+    };
+    education: Array<{
+        schoolName: string;
+        degree: string;
+        major: string;
+        period: string;
+        status: string;
+    }>;
+    experience: Array<{
+        companyName: string;
+        period: string;
+        totalDuration: string;
+        projects: Array<{
+            projectName: string;
+            period: string;
+            role: string;
+            achievements: string[];
+        }>;
+    }>;
+    extracurricular: Array<{
+        title: string;
+        period: string;
+        description: string;
+    }>;
+    certifications: string[];
+    skills: string[];
+    keywords: string[];
+    selfIntroduction: string;
+};
+
+const RESUME_PLACEHOLDER: ResumeData = {
+    personalInfo: {
+        name: "Analyzing Profile...",
+        gender: "",
+        birthYear: "",
+        phone: "***-****-****",
+        email: "secure@vault.com",
+        address: "",
+        summary: "",
+    },
+    education: [
+        {
+            schoolName: "Analyzing Education History...",
+            degree: "Loading...",
+            major: "Loading...",
+            period: "Loading...",
+            status: "",
+        },
+    ],
+    experience: [
+        {
+            companyName: "Extracting Professional Experience...",
+            period: "",
+            totalDuration: "",
+            projects: [
+                {
+                    projectName: "AI is reviewing your projects...",
+                    period: "",
+                    role: "",
+                    achievements: ["Reviewing metrics...", "Extracting keywords..."],
+                },
+            ],
+        },
+    ],
+    extracurricular: [],
+    certifications: [],
+    skills: ["Analyzing tech stack..."],
+    keywords: ["AI Processing..."],
+    selfIntroduction: "AI is currently structuring your professional profile to match Korean HR standards...",
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toText(value: unknown, fallback = ''): string {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return fallback;
+}
+
+function toTextArray(value: unknown): string[] {
+    if (Array.isArray(value)) {
+        return value.map((item) => toText(item).trim()).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+        return value
+            .split(/\n|,/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+    return [];
+}
+
+function toRecordArray(value: unknown): Record<string, unknown>[] {
+    if (Array.isArray(value)) return value.filter(isRecord);
+    if (isRecord(value)) return [value];
+    return [];
+}
+
+function normalizeResumeData(raw: unknown): ResumeData {
+    const source = isRecord(raw) ? raw : {};
+    const personalInfoRaw = isRecord(source.personalInfo) ? source.personalInfo : {};
+
+    return {
+        personalInfo: {
+            name: toText(personalInfoRaw.name, ''),
+            gender: toText(personalInfoRaw.gender, ''),
+            birthYear: toText(personalInfoRaw.birthYear, ''),
+            phone: toText(personalInfoRaw.phone, ''),
+            email: toText(personalInfoRaw.email, ''),
+            address: toText(personalInfoRaw.address, ''),
+            summary: toText(personalInfoRaw.summary, ''),
+        },
+        education: toRecordArray(source.education).map((item) => ({
+            schoolName: toText(item.schoolName, ''),
+            degree: toText(item.degree, ''),
+            major: toText(item.major, ''),
+            period: toText(item.period, ''),
+            status: toText(item.status, ''),
+        })),
+        experience: toRecordArray(source.experience).map((exp) => ({
+            companyName: toText(exp.companyName, ''),
+            period: toText(exp.period, ''),
+            totalDuration: toText(exp.totalDuration, ''),
+            projects: toRecordArray(exp.projects).map((project) => ({
+                projectName: toText(project.projectName, ''),
+                period: toText(project.period, ''),
+                role: toText(project.role, ''),
+                achievements: toTextArray(project.achievements),
+            })),
+        })),
+        extracurricular: toRecordArray(source.extracurricular).map((activity) => ({
+            title: toText(activity.title, ''),
+            period: toText(activity.period, ''),
+            description: toText(activity.description, ''),
+        })),
+        certifications: toTextArray(source.certifications),
+        skills: toTextArray(source.skills),
+        keywords: toTextArray(source.keywords),
+        selfIntroduction: toText(source.selfIntroduction, ''),
+    };
+}
+
 // Inner component: renders inside PayPalScriptProvider, waits for SDK to be ready
 function PayPalButtonsWrapper({ onApprove, onError }: {
     onApprove: (orderId: string) => void;
@@ -62,7 +215,7 @@ function PayPalButtonsWrapper({ onApprove, onError }: {
 }
 
 export function ResumePreview() {
-    const [resumeData, setResumeData] = useState<any>(null);
+    const [resumeData, setResumeData] = useState<ResumeData | null>(null);
     const [rawText, setRawText] = useState<string | null>(null);
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -76,7 +229,7 @@ export function ResumePreview() {
 
             if (parsedDataStr) {
                 // If the user clicked "View Demo", parsedResume is already injected.
-                setResumeData(JSON.parse(parsedDataStr));
+                setResumeData(normalizeResumeData(JSON.parse(parsedDataStr)));
                 // Optionally start unlocked, or keep locked for demo purposes.
                 // Keeping it locked to demonstrate the lock screen
             } else if (rawTextStr) {
@@ -122,7 +275,7 @@ export function ResumePreview() {
                     throw new Error(result.error || 'Failed to generate resume');
                 }
 
-                setResumeData(result.data);
+                setResumeData(normalizeResumeData(result.data));
                 setIsUnlocked(true);
                 // Clear raw text, optionally save parsed if needed
                 localStorage.removeItem('rawResumeText');
@@ -140,13 +293,8 @@ export function ResumePreview() {
         window.print();
     };
 
-    // Use dummy data to construct the blurred background if real data is not yet generated
-    const displayData = resumeData || {
-        personalInfo: { name: "Analyzing Profile...", email: "secure@vault.com", phone: "***-****-****" },
-        education: [{ schoolName: "Analyzing Education History...", degree: "Loading...", major: "Loading...", period: "Loading...", status: "" }],
-        experience: [{ companyName: "Extracting Professional Experience...", totalDuration: "", projects: [{ projectName: "AI is reviewing your projects...", period: "", role: "", achievements: ["Reviewing metrics...", "Extracting keywords..."] }] }],
-        extracurricular: [], certifications: [], skills: ["Analyzing tech stack..."], keywords: ["AI Processing..."], selfIntroduction: "AI is currently structuring your professional profile to match Korean HR standards..."
-    };
+    // Use placeholder data to construct the blurred background if real data is not yet generated
+    const displayData = resumeData || RESUME_PLACEHOLDER;
 
     const { personalInfo, education, experience, extracurricular, certifications, skills, keywords, selfIntroduction } = displayData;
 
