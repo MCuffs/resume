@@ -1,5 +1,71 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PayPalButtons, PayPalScriptProvider, usePayPalScriptReducer } from '@paypal/react-paypal-js';
+
+type ConsultingServiceKey = 'review' | 'interview';
+
+const CONSULTING_SERVICES: Record<ConsultingServiceKey, { label: string; krwPrice: string; usdPrice: string }> = {
+    review: { label: 'Korean Resume Review', krwPrice: '₩29,000', usdPrice: '21.99' },
+    interview: { label: 'Custom Interview Questions', krwPrice: '₩69,000', usdPrice: '49.99' },
+};
+
+function sanitizePayPalClientId(value: unknown): string {
+    return String(value || '').replace(/\s+/g, '').trim();
+}
+
+function ConsultingPayPalButtons({
+    amountUsd,
+    description,
+    disabled,
+    onApproved,
+    onError,
+}: {
+    amountUsd: string;
+    description: string;
+    disabled: boolean;
+    onApproved: (orderId: string) => void;
+    onError: (message: string) => void;
+}) {
+    const [{ isPending, isRejected }] = usePayPalScriptReducer();
+
+    if (isPending) {
+        return <div className="w-full text-[13px] font-semibold text-[#556987]">Loading PayPal checkout...</div>;
+    }
+
+    if (isRejected) {
+        return <div className="w-full text-[13px] font-semibold text-red-500">PayPal failed to load. Refresh and try again.</div>;
+    }
+
+    return (
+        <PayPalButtons
+            style={{ layout: 'vertical', shape: 'rect', color: 'blue', height: 45, tagline: false }}
+            disabled={disabled}
+            createOrder={(_data, actions) =>
+                actions.order.create({
+                    intent: 'CAPTURE',
+                    purchase_units: [
+                        {
+                            description,
+                            amount: { currency_code: 'USD', value: amountUsd },
+                        },
+                    ],
+                })
+            }
+            onApprove={async (data, actions) => {
+                try {
+                    if (!actions.order) throw new Error('Missing PayPal order action');
+                    await actions.order.capture();
+                    onApproved(data.orderID);
+                } catch (error: any) {
+                    onError(error?.message || 'Failed to capture PayPal payment');
+                }
+            }}
+            onError={(error: any) => {
+                onError(error?.message || 'PayPal payment failed');
+            }}
+        />
+    );
+}
 
 export function Home() {
     const [file, setFile] = useState<File | null>(null);
@@ -8,6 +74,7 @@ export function Home() {
     const [showConsultingModal, setShowConsultingModal] = useState(false);
     const [selectedService, setSelectedService] = useState('');
     const [selectedServicePrice, setSelectedServicePrice] = useState('');
+    const [selectedServiceUsdPrice, setSelectedServiceUsdPrice] = useState('');
     const [formData, setFormData] = useState({ name: '', email: '', targetCompany: '', brief: '' });
     const [englishResumeFile, setEnglishResumeFile] = useState<File | null>(null);
     const [koreanResumeFile, setKoreanResumeFile] = useState<File | null>(null);
@@ -75,6 +142,7 @@ export function Home() {
         setShowConsultingModal(false);
         setSelectedService('');
         setSelectedServicePrice('');
+        setSelectedServiceUsdPrice('');
         setFormData({ name: '', email: '', targetCompany: '', brief: '' });
         setEnglishResumeFile(null);
         setKoreanResumeFile(null);
@@ -84,9 +152,11 @@ export function Home() {
         setConsultingLoading(false);
     };
 
-    const openPaymentModal = (serviceType: string, servicePrice: string) => {
-        setSelectedService(serviceType);
-        setSelectedServicePrice(servicePrice);
+    const openPaymentModal = (serviceKey: ConsultingServiceKey) => {
+        const plan = CONSULTING_SERVICES[serviceKey];
+        setSelectedService(plan.label);
+        setSelectedServicePrice(plan.krwPrice);
+        setSelectedServiceUsdPrice(plan.usdPrice);
         setConsultingStep('intake');
         setEnglishResumeFile(null);
         setKoreanResumeFile(null);
@@ -109,7 +179,7 @@ export function Home() {
         setConsultingStep('payment');
     };
 
-    const handleConsultingPaymentComplete = async () => {
+    const handleConsultingPaymentComplete = async (paypalOrderId: string) => {
         setConsultingLoading(true);
         setConsultingError('');
         try {
@@ -120,7 +190,7 @@ export function Home() {
             requestData.append('email', formData.email);
             requestData.append('targetCompany', formData.targetCompany);
             requestData.append('brief', formData.brief);
-            requestData.append('paymentReference', paymentReference || '');
+            requestData.append('paymentReference', paypalOrderId);
             requestData.append('englishResume', englishResumeFile as File);
             requestData.append('koreanResume', koreanResumeFile as File);
 
@@ -151,6 +221,8 @@ export function Home() {
             setConsultingLoading(false);
         }
     };
+
+    const paypalClientId = sanitizePayPalClientId(import.meta.env.VITE_PAYPAL_CLIENT_ID);
 
     return (
         <div className="min-h-screen bg-white text-[#112E51] font-sans selection:bg-[#29AEE1] selection:text-white">
@@ -435,6 +507,9 @@ export function Home() {
                         <p className="text-[18px] text-[#556987] max-w-2xl mx-auto leading-relaxed">
                             For critical applications, get your AI-translated resume reviewed and enriched by former Korean HR recruiters.
                         </p>
+                        <p className="text-[12px] md:text-[13px] text-[#112E51] font-semibold mt-4">
+                            * 하루에 5개 요청만 받고 있어요. 순차적으로 마감될 수 있습니다.
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -450,8 +525,8 @@ export function Home() {
                                 </p>
                             </div>
                             <div>
-                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩29,000</div>
-                                <button className="w-full bg-[#112E51] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#0a1e36] transition-colors" onClick={() => openPaymentModal('Korean Resume Review', '₩29,000')}>
+                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">{CONSULTING_SERVICES.review.krwPrice}</div>
+                                <button className="w-full bg-[#112E51] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#0a1e36] transition-colors" onClick={() => openPaymentModal('review')}>
                                     Inquire Now
                                 </button>
                             </div>
@@ -469,8 +544,8 @@ export function Home() {
                                 </p>
                             </div>
                             <div className="relative z-10">
-                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">₩69,000</div>
-                                <button className="w-full bg-[#29AEE1] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#1f9bc9] transition-colors" onClick={() => openPaymentModal('Custom Interview Questions', '₩69,000')}>
+                                <div className="text-[36px] font-extrabold text-[#29AEE1] leading-none mb-6">{CONSULTING_SERVICES.interview.krwPrice}</div>
+                                <button className="w-full bg-[#29AEE1] text-white font-bold text-[15px] py-3.5 rounded-xl hover:bg-[#1f9bc9] transition-colors" onClick={() => openPaymentModal('interview')}>
                                     Inquire Now
                                 </button>
                             </div>
@@ -632,22 +707,27 @@ export function Home() {
                                             <p className="text-[13px] font-bold text-[#556987] uppercase tracking-wide mb-2">Pay to start</p>
                                             <div className="text-[34px] leading-none font-extrabold text-[#29AEE1] mb-3">{selectedServicePrice}</div>
                                             <p className="text-[13px] text-[#556987]">
-                                                Replace this section with your real checkout integration (PayPal/Stripe). For now, this is a local flow prototype.
+                                                Complete secure PayPal payment first. Your request is submitted only after server-side payment verification.
                                             </p>
                                         </div>
 
-                                        <div className="mb-4">
-                                            <label className="block text-[14px] font-bold text-[#112E51] mb-2 uppercase tracking-wide text-xs">Payment Reference (Optional)</label>
-                                            <input
-                                                type="text"
-                                                value={paymentReference}
-                                                onChange={(e) => setPaymentReference(e.target.value)}
-                                                className="w-full bg-[#f9fafb] border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-[#112E51] font-medium focus:bg-white focus:outline-none focus:border-[#29AEE1] focus:ring-2 focus:ring-[#29AEE1]/20 transition-all shadow-sm"
-                                                placeholder="e.g. PAYPAL-ORDER-ID-1234"
-                                            />
-                                        </div>
-
                                         {consultingError && <p className="text-red-500 text-[13px] font-semibold mb-3">{consultingError}</p>}
+
+                                        {paypalClientId ? (
+                                            <PayPalScriptProvider options={{ clientId: paypalClientId, currency: 'USD', components: 'buttons' }}>
+                                                <ConsultingPayPalButtons
+                                                    amountUsd={selectedServiceUsdPrice || '0.01'}
+                                                    description={selectedService}
+                                                    disabled={consultingLoading}
+                                                    onApproved={(orderId) => handleConsultingPaymentComplete(orderId)}
+                                                    onError={(message) => setConsultingError(message)}
+                                                />
+                                            </PayPalScriptProvider>
+                                        ) : (
+                                            <p className="text-red-500 text-[13px] font-semibold mb-3">
+                                                PayPal client ID is missing. Set VITE_PAYPAL_CLIENT_ID.
+                                            </p>
+                                        )}
 
                                         <div className="pt-2 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 w-full">
                                             <button
@@ -657,14 +737,9 @@ export function Home() {
                                             >
                                                 Back
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleConsultingPaymentComplete}
-                                                disabled={consultingLoading}
-                                                className="w-full sm:w-auto bg-[#29AEE1] hover:bg-[#1E95C3] text-white text-[15px] font-bold px-8 py-3.5 rounded-full transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed min-w-[180px]"
-                                            >
-                                                {consultingLoading ? 'Confirming...' : 'I Paid - Submit Request'}
-                                            </button>
+                                            <div className="w-full sm:w-auto text-[13px] font-semibold text-[#556987]">
+                                                {consultingLoading ? 'Verifying payment and uploading files...' : 'After successful payment, submission runs automatically.'}
+                                            </div>
                                         </div>
                                     </>
                                 )}

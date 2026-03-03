@@ -9,7 +9,18 @@ const { Anthropic } = require('@anthropic-ai/sdk');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-app.use(cors());
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((x) => x.trim())
+  .filter(Boolean);
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:4173', 'https://arthrian.cloud', 'https://www.arthrian.cloud'];
+const corsAllowList = new Set([...defaultOrigins, ...allowedOrigins]);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || corsAllowList.has(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+}));
 app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
@@ -51,6 +62,11 @@ const ALLOWED_FEEDBACK_ISSUES = new Set([
   'grammar',
   'other',
 ]);
+const CONSULTING_PRICE_USD_BY_SERVICE = {
+  'Korean Resume Review': '21.99',
+  'Custom Interview Questions': '49.99',
+};
+const consultingRequestBuckets = new Map();
 
 function extractJsonObject(text) {
   if (!text || typeof text !== 'string') return null;
@@ -206,6 +222,101 @@ function sanitizeText(v, max = 2000) {
   return v.trim().slice(0, max);
 }
 
+function normalizeAmount(amount) {
+  const num = Number(amount);
+  if (!Number.isFinite(num)) return '';
+  return num.toFixed(2);
+}
+
+function getPayPalApiBase() {
+  const mode = String(process.env.PAYPAL_ENV || '').trim().toLowerCase();
+  return mode === 'live'
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com';
+}
+
+async function getPayPalAccessToken() {
+  const clientId = sanitizeString(process.env.PAYPAL_CLIENT_ID, 200);
+  const secret = sanitizeString(process.env.PAYPAL_CLIENT_SECRET, 200);
+  if (!clientId || !secret) {
+    throw new Error('PayPal server credentials are not configured');
+  }
+
+  const auth = Buffer.from(`${clientId}:${secret}`).toString('base64');
+  const response = await fetch(`${getPayPalApiBase()}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload?.access_token) {
+    throw new Error(payload?.error_description || payload?.error || 'Failed to get PayPal access token');
+  }
+  return payload.access_token;
+}
+
+async function verifyConsultingPayment(orderId, service) {
+  if (!orderId) throw new Error('Missing PayPal order id');
+  const expectedAmount = CONSULTING_PRICE_USD_BY_SERVICE[service];
+  if (!expectedAmount) throw new Error('Unsupported consulting service');
+
+  const token = await getPayPalAccessToken();
+  const response = await fetch(`${getPayPalApiBase()}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  const order = await response.json();
+  if (!response.ok) {
+    throw new Error(order?.message || 'Failed to fetch PayPal order');
+  }
+
+  if (order?.status !== 'COMPLETED') {
+    throw new Error(`Payment is not completed (status: ${order?.status || 'unknown'})`);
+  }
+
+  const unit = Array.isArray(order?.purchase_units) ? order.purchase_units[0] : null;
+  const currency = unit?.amount?.currency_code;
+  const amount = normalizeAmount(unit?.amount?.value);
+  if (currency !== 'USD' || amount !== normalizeAmount(expectedAmount)) {
+    throw new Error('PayPal amount/currency mismatch');
+  }
+
+  return {
+    orderId: order.id,
+    amount,
+    currency,
+    status: order.status,
+  };
+}
+
+function isLikelyPdf(file) {
+  const mime = String(file?.mimetype || '').toLowerCase();
+  const name = String(file?.originalname || '').toLowerCase();
+  return mime.includes('pdf') || name.endsWith('.pdf');
+}
+
+function rateLimitConsultingRequest(req, limit = 15, windowMs = 10 * 60 * 1000) {
+  const ip = (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown');
+  const key = `consulting:${ip}`;
+  const now = Date.now();
+  const existing = consultingRequestBuckets.get(key);
+  if (!existing || existing.resetAt <= now) {
+    consultingRequestBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return { ok: true };
+  }
+  if (existing.count >= limit) {
+    return { ok: false, retryAfterSec: Math.ceil((existing.resetAt - now) / 1000) };
+  }
+  existing.count += 1;
+  return { ok: true };
+}
+
 function getDashboardAdminKey() {
   return sanitizeString(process.env.DASHBOARD_ADMIN_KEY, 200) || '';
 }
@@ -250,6 +361,11 @@ app.post('/api/consulting-request', consultingUpload.fields([
   };
 
   try {
+    const rate = rateLimitConsultingRequest(req);
+    if (!rate.ok) {
+      return res.status(429).json({ ok: false, error: `Too many requests. Retry in ${rate.retryAfterSec}s` });
+    }
+
     if (!supabaseAdmin) {
       return res.status(500).json({ ok: false, error: 'Supabase admin is not configured' });
     }
@@ -260,6 +376,10 @@ app.post('/api/consulting-request', consultingUpload.fields([
       cleanup();
       return res.status(400).json({ ok: false, error: 'Both English and Korean resume PDFs are required' });
     }
+    if (!isLikelyPdf(englishResume) || !isLikelyPdf(koreanResume)) {
+      cleanup();
+      return res.status(400).json({ ok: false, error: 'Only PDF files are allowed' });
+    }
 
     const service = sanitizeText(req.body?.service, 120);
     const servicePrice = sanitizeText(req.body?.servicePrice, 40);
@@ -268,10 +388,16 @@ app.post('/api/consulting-request', consultingUpload.fields([
     const targetCompany = sanitizeText(req.body?.targetCompany, 200);
     const brief = sanitizeText(req.body?.brief, 4000);
     const paymentReference = sanitizeText(req.body?.paymentReference, 120);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!service || !name || !email || !targetCompany || !brief) {
       cleanup();
       return res.status(400).json({ ok: false, error: 'Missing required fields' });
     }
+    if (!emailRegex.test(email)) {
+      cleanup();
+      return res.status(400).json({ ok: false, error: 'Invalid email format' });
+    }
+    const payment = await verifyConsultingPayment(paymentReference, service);
 
     const requestId = `CONSULT-${Date.now()}`;
     const bucket = process.env.SUPABASE_CONSULTING_BUCKET || 'consulting-resumes';
@@ -317,6 +443,7 @@ app.post('/api/consulting-request', consultingUpload.fields([
       applicant: { name, email, targetCompany },
       clientNotes: brief,
       paymentReference: paymentReference || null,
+      paymentVerification: payment,
       files: {
         englishResume: englishFile,
         koreanResume: koreanFile,
@@ -333,7 +460,7 @@ app.post('/api/consulting-request', consultingUpload.fields([
       target_company: targetCompany,
       client_notes: brief,
       payment_reference: paymentReference || null,
-      payment_status: 'paid_submitted',
+      payment_status: payment.status || 'paid_submitted',
       english_file_name: englishFile.fileName,
       english_file_size: englishFile.size,
       english_storage_path: englishFile.storagePath,
