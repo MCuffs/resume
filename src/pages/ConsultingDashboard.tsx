@@ -30,12 +30,25 @@ export function ConsultingDashboard() {
   const [items, setItems] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [dashboardKey, setDashboardKey] = useState('');
+  const [keyInput, setKeyInput] = useState('');
 
-  const loadItems = async () => {
+  const loadItems = async (keyOverride?: string) => {
+    const key = keyOverride ?? dashboardKey;
+    if (!key) {
+      setLoading(false);
+      setError('');
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/consulting-requests?limit=100');
+      const response = await fetch('/api/consulting-requests?limit=100', {
+        headers: {
+          'x-dashboard-key': key,
+        },
+      });
       const raw = await response.text();
       let result: any = null;
       try {
@@ -52,6 +65,10 @@ export function ConsultingDashboard() {
             null;
 
       if (!response.ok || (!items && result?.ok !== true)) {
+        if (response.status === 401) {
+          sessionStorage.removeItem('consulting_dashboard_key');
+          setDashboardKey('');
+        }
         throw new Error(
           result?.error ||
           (raw && raw.length < 300 ? raw : '') ||
@@ -67,8 +84,34 @@ export function ConsultingDashboard() {
   };
 
   useEffect(() => {
-    loadItems();
+    const saved = sessionStorage.getItem('consulting_dashboard_key') || '';
+    if (saved) {
+      setDashboardKey(saved);
+      setKeyInput(saved);
+      loadItems(saved);
+      return;
+    }
+    setLoading(false);
   }, []);
+
+  const unlockDashboard = (e: React.FormEvent) => {
+    e.preventDefault();
+    const key = keyInput.trim();
+    if (!key) {
+      setError('Please enter dashboard access key');
+      return;
+    }
+    sessionStorage.setItem('consulting_dashboard_key', key);
+    setDashboardKey(key);
+    loadItems(key);
+  };
+
+  const logoutDashboard = () => {
+    sessionStorage.removeItem('consulting_dashboard_key');
+    setDashboardKey('');
+    setItems([]);
+    setError('');
+  };
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] px-4 py-8 text-[#112E51]">
@@ -78,13 +121,45 @@ export function ConsultingDashboard() {
             <h1 className="text-3xl font-extrabold tracking-tight">Consulting Requests Dashboard</h1>
             <p className="text-sm text-[#556987] mt-1">Latest paid requests with attached English/Korean resume files.</p>
           </div>
-          <button
-            onClick={loadItems}
-            className="bg-[#29AEE1] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#1E95C3] transition-colors"
-          >
-            Refresh
-          </button>
+          {dashboardKey ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadItems()}
+                className="bg-[#29AEE1] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#1E95C3] transition-colors"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={logoutDashboard}
+                className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors"
+              >
+                Lock
+              </button>
+            </div>
+          ) : null}
         </div>
+
+        {!dashboardKey && (
+          <form onSubmit={unlockDashboard} className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
+            <p className="text-sm font-bold mb-2">Admin Access Required</p>
+            <p className="text-sm text-[#556987] mb-3">Enter dashboard access key.</p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                placeholder="Dashboard key"
+              />
+              <button
+                type="submit"
+                className="bg-[#112E51] text-white px-4 py-2 rounded-lg text-sm font-bold"
+              >
+                Unlock
+              </button>
+            </div>
+          </form>
+        )}
 
         {loading && (
           <div className="bg-white border border-slate-200 rounded-xl p-5 text-sm font-semibold text-[#556987]">

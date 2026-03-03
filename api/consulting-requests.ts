@@ -1,6 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseAdmin } from './_lib/supabaseAdmin';
 
+function sanitizeString(v: unknown, max = 200) {
+  if (typeof v !== 'string') return '';
+  return v.trim().slice(0, max);
+}
+
+function extractDashboardKey(req: VercelRequest) {
+  const headerKey = sanitizeString(req.headers['x-dashboard-key']);
+  if (headerKey) return headerKey;
+
+  const authHeader = sanitizeString(req.headers.authorization, 400);
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    return sanitizeString(authHeader.slice(7));
+  }
+
+  return '';
+}
+
 async function createSignedUrlSafe(supabase: any, bucket: string, storagePath: string | null, expiresInSec = 60 * 60 * 24 * 14) {
   if (!storagePath) return null;
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(storagePath, expiresInSec);
@@ -11,6 +28,16 @@ async function createSignedUrlSafe(supabase: any, bucket: string, storagePath: s
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if ((req.method || 'GET').toUpperCase() !== 'GET') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  }
+
+  const expectedKey = sanitizeString(process.env.DASHBOARD_ADMIN_KEY);
+  if (!expectedKey) {
+    return res.status(503).json({ ok: false, error: 'Dashboard admin key is not configured on server' });
+  }
+
+  const providedKey = extractDashboardKey(req);
+  if (!providedKey || providedKey !== expectedKey) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized dashboard access' });
   }
 
   try {

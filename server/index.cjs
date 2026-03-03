@@ -206,6 +206,22 @@ function sanitizeText(v, max = 2000) {
   return v.trim().slice(0, max);
 }
 
+function getDashboardAdminKey() {
+  return sanitizeString(process.env.DASHBOARD_ADMIN_KEY, 200) || '';
+}
+
+function getProvidedDashboardKey(req) {
+  const headerKey = sanitizeString(req.headers['x-dashboard-key'], 200);
+  if (headerKey) return headerKey;
+
+  const authHeader = sanitizeString(req.headers.authorization, 400);
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    return sanitizeString(authHeader.slice(7), 200) || '';
+  }
+
+  return '';
+}
+
 function buildSafeFileName(name) {
   return String(name || 'resume.pdf')
     .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -352,6 +368,16 @@ app.post('/api/consulting-request', consultingUpload.fields([
 
 app.get('/api/consulting-requests', async (req, res) => {
   try {
+    const expectedKey = getDashboardAdminKey();
+    if (!expectedKey) {
+      return res.status(503).json({ ok: false, error: 'Dashboard admin key is not configured on server' });
+    }
+
+    const providedKey = getProvidedDashboardKey(req);
+    if (!providedKey || providedKey !== expectedKey) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized dashboard access' });
+    }
+
     if (!supabaseAdmin) {
       return res.status(500).json({ ok: false, error: 'Supabase admin is not configured' });
     }
