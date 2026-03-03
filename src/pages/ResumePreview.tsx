@@ -233,6 +233,8 @@ export function ResumePreview() {
     const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
     const [feedbackError, setFeedbackError] = useState('');
     const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
+    const [awaitingDownloadConfirm, setAwaitingDownloadConfirm] = useState(false);
+    const [showDownloadConfirmPrompt, setShowDownloadConfirmPrompt] = useState(false);
     const [isCountdownActive, setIsCountdownActive] = useState(false);
     const [countdownSeconds, setCountdownSeconds] = useState(0);
     const feedbackRevealTimerRef = useRef<number | null>(null);
@@ -276,6 +278,20 @@ export function ResumePreview() {
             }
         };
     }, []);
+
+    useEffect(() => {
+        const onAfterPrint = () => {
+            if (awaitingDownloadConfirm) {
+                setAwaitingDownloadConfirm(false);
+                setShowDownloadConfirmPrompt(true);
+            }
+        };
+
+        window.addEventListener('afterprint', onAfterPrint);
+        return () => {
+            window.removeEventListener('afterprint', onAfterPrint);
+        };
+    }, [awaitingDownloadConfirm]);
 
     if (initState === 'checking') {
         return (
@@ -355,14 +371,20 @@ export function ResumePreview() {
         }
     };
 
-    const handlePrint = () => {
-        window.print();
+    const clearFeedbackTimers = () => {
         if (feedbackRevealTimerRef.current) {
             window.clearTimeout(feedbackRevealTimerRef.current);
+            feedbackRevealTimerRef.current = null;
         }
         if (feedbackCountdownIntervalRef.current) {
             window.clearInterval(feedbackCountdownIntervalRef.current);
+            feedbackCountdownIntervalRef.current = null;
         }
+    };
+
+    const startFeedbackCountdown = () => {
+        clearFeedbackTimers();
+        setShowDownloadConfirmPrompt(false);
         setShowFeedbackPrompt(false);
         setIsCountdownActive(true);
         setCountdownSeconds(7);
@@ -381,13 +403,20 @@ export function ResumePreview() {
         }, 1000);
 
         feedbackRevealTimerRef.current = window.setTimeout(() => {
-            if (feedbackCountdownIntervalRef.current) {
-                window.clearInterval(feedbackCountdownIntervalRef.current);
-                feedbackCountdownIntervalRef.current = null;
-            }
+            clearFeedbackTimers();
             setIsCountdownActive(false);
             setShowFeedbackPrompt(true);
         }, 7000);
+    };
+
+    const handlePrint = () => {
+        clearFeedbackTimers();
+        setShowFeedbackPrompt(false);
+        setShowDownloadConfirmPrompt(false);
+        setIsCountdownActive(false);
+        setCountdownSeconds(0);
+        setAwaitingDownloadConfirm(true);
+        window.print();
     };
 
     const toggleFeedbackIssue = (issue: string) => {
@@ -724,6 +753,32 @@ export function ResumePreview() {
                 </div>
             )}
 
+            {isUnlocked && showDownloadConfirmPrompt && !showFeedbackPrompt && (
+                <div className="fixed inset-0 z-[71] bg-slate-900/45 backdrop-blur-sm print:hidden p-4 flex items-center justify-center">
+                    <div className="w-full max-w-[520px] bg-white rounded-2xl border border-slate-200 p-6 shadow-2xl">
+                        <p className="text-slate-900 font-extrabold text-xl mb-2">Did the PDF download complete?</p>
+                        <p className="text-slate-500 text-sm mb-5">Continue to feedback only after the file is saved.</p>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={startFeedbackCountdown}
+                                className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                            >
+                                Yes, downloaded
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowDownloadConfirmPrompt(false);
+                                    setAwaitingDownloadConfirm(false);
+                                }}
+                                className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold"
+                            >
+                                Not yet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {isUnlocked && showFeedbackPrompt && (
                 <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm print:hidden p-4 flex items-center justify-center">
                     <div className="w-full max-w-[980px] bg-white rounded-2xl border border-slate-200 p-6 shadow-2xl">
@@ -796,7 +851,7 @@ export function ResumePreview() {
                 </div>
             )}
 
-            {isUnlocked && isCountdownActive && !showFeedbackPrompt && (
+            {isUnlocked && isCountdownActive && !showFeedbackPrompt && !showDownloadConfirmPrompt && (
                 <div className="fixed inset-0 z-[69] bg-slate-900/35 backdrop-blur-[2px] print:hidden p-4 flex items-center justify-center">
                     <div className="bg-white border border-slate-200 rounded-2xl px-8 py-7 text-center shadow-2xl">
                         <p className="text-slate-900 font-extrabold text-2xl mb-2">Moving to feedback</p>
