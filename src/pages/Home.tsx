@@ -493,6 +493,9 @@ export function Home() {
                             Check Announcements <span className="text-[#29AEE1] font-bold ml-1">&gt;</span>
                         </button>
                     </div>
+                    <p className="mt-4 text-[12px] md:text-[13px] text-[#556987] font-medium">
+                        We do not rely on a generic one-shot AI model. Built by a recruiter with 5 years in Korean hiring, our Korean-resume-trained AI is designed to maximize your pass rate.
+                    </p>
                 </div>
             </section >
 
@@ -567,7 +570,7 @@ export function Home() {
                             For critical applications, get your AI-translated resume reviewed and enriched by former Korean HR recruiters.
                         </p>
                         <p className="text-[12px] md:text-[13px] text-[#112E51] font-semibold mt-4">
-                            * 하루에 5개 요청만 받고 있어요. 순차적으로 마감될 수 있습니다.
+                            * We only accept 5 requests per day. Slots may close in sequence.
                         </p>
                     </div>
 
