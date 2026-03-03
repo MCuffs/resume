@@ -12,6 +12,148 @@ if (supabaseUrl && supabaseKey) {
 }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const MODEL_CANDIDATES = [
+    process.env.ANTHROPIC_MODEL,
+    'claude-3-5-sonnet-latest',
+    'claude-3-7-sonnet-latest',
+    'claude-sonnet-4-0',
+    'claude-sonnet-4-5',
+].filter(Boolean) as string[];
+const MAX_GENERATION_ATTEMPTS = 3;
+
+function extractJsonObject(text: string): string | null {
+    if (!text || typeof text !== 'string') return null;
+
+    let candidate = text.trim();
+    if (candidate.startsWith('```')) {
+        candidate = candidate.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    }
+
+    const firstBrace = candidate.indexOf('{');
+    const lastBrace = candidate.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
+
+    return candidate.slice(firstBrace, lastBrace + 1);
+}
+
+function isModelNotFoundError(err: any): boolean {
+    const status = err?.status;
+    const apiType = err?.error?.error?.type || err?.error?.type;
+    const message = String(err?.message || err?.error?.error?.message || '');
+    return status === 404 || apiType === 'not_found_error' || message.includes('model:');
+}
+
+async function createAnthropicMessageWithFallback(systemPrompt: string, userPrompt: string) {
+    let lastError: any = null;
+    for (const model of MODEL_CANDIDATES) {
+        try {
+            const msg = await anthropic.messages.create({
+                model,
+                max_tokens: 4096,
+                temperature: 0.2,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userPrompt }]
+            });
+            return { msg, model };
+        } catch (err: any) {
+            lastError = err;
+            if (isModelNotFoundError(err)) {
+                console.warn(`Anthropic model unavailable: ${model}. Trying next candidate...`);
+                continue;
+            }
+            throw err;
+        }
+    }
+    throw lastError || new Error('No available Anthropic model candidates');
+}
+
+function validateResumePayload(data: any): string[] {
+    const issues: string[] = [];
+    const isObj = (v: any) => typeof v === 'object' && v !== null && !Array.isArray(v);
+    const isText = (v: any) => typeof v === 'string' && v.trim().length > 0;
+    const isTextArray = (v: any) => Array.isArray(v) && v.every((item) => typeof item === 'string');
+
+    if (!isObj(data)) return ['Payload is not a JSON object'];
+
+    if (!isObj(data.personalInfo)) {
+        issues.push('personalInfo must be an object');
+    } else {
+        if (!isText(data.personalInfo.name)) issues.push('personalInfo.name is required');
+        if (!isText(data.personalInfo.email)) issues.push('personalInfo.email is required');
+        if (!isText(data.personalInfo.summary) || data.personalInfo.summary.trim().length < 30) {
+            issues.push('personalInfo.summary must be at least 30 characters');
+        }
+    }
+
+    if (!Array.isArray(data.education) || data.education.length === 0) {
+        issues.push('education must be a non-empty array');
+    }
+
+    if (!Array.isArray(data.experience) || data.experience.length === 0) {
+        issues.push('experience must be a non-empty array');
+    } else {
+        data.experience.forEach((exp: any, i: number) => {
+            if (!isObj(exp)) {
+                issues.push(`experience[${i}] must be an object`);
+                return;
+            }
+            if (!Array.isArray(exp.projects) || exp.projects.length === 0) {
+                issues.push(`experience[${i}].projects must be a non-empty array`);
+                return;
+            }
+            exp.projects.forEach((proj: any, j: number) => {
+                if (!isObj(proj)) {
+                    issues.push(`experience[${i}].projects[${j}] must be an object`);
+                    return;
+                }
+                if (!isTextArray(proj.achievements) || proj.achievements.length < 2) {
+                    issues.push(`experience[${i}].projects[${j}].achievements must have at least 2 bullet strings`);
+                }
+            });
+        });
+    }
+
+    if (!isTextArray(data.skills) || data.skills.length === 0) {
+        issues.push('skills must be a non-empty string array');
+    }
+    if (!isTextArray(data.keywords) || data.keywords.length === 0) {
+        issues.push('keywords must be a non-empty string array');
+    }
+    if (!isText(data.selfIntroduction) || data.selfIntroduction.trim().length < 200) {
+        issues.push('selfIntroduction must be at least 200 characters');
+    }
+
+    return issues;
+}
+
+function buildInitialUserPrompt(rawText: string): string {
+    return `Here is the English resume text:
+
+${rawText}
+
+Hard constraints:
+- Use only facts grounded in the source text.
+- Do not invent metrics, employers, dates, or certifications.
+- If missing, keep fields empty string ("") or empty array ([]), but preserve full schema.`;
+}
+
+function buildRepairUserPrompt(rawText: string, previousJsonPayload: string, issues: string[]): string {
+    return `Your previous JSON output failed validation. Fix it and return ONLY corrected JSON.
+
+Validation issues:
+${issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}
+
+Original English resume text:
+${rawText}
+
+Previous JSON output:
+${previousJsonPayload}
+
+Rules:
+- Preserve schema exactly.
+- Keep all facts grounded in source text.
+- No markdown, no explanations, output JSON object only.`;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') {
@@ -49,6 +191,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         } else if (!orderId) {
             return res.status(403).json({ error: 'Unauthorized: No payment verification found' });
+        }
+
+        if (!process.env.ANTHROPIC_API_KEY) {
+            return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured on server' });
         }
 
         const systemPrompt = `You are an expert Korean Resume Translator and Career Consultant. 
@@ -105,19 +251,42 @@ IMPORTANT: Respond ONLY with a valid JSON strictly following this structure. Do 
   "selfIntroduction": "Write a highly professional 3-4 paragraph '자기소개서' (Self Introduction Letter)."
 }`;
 
-        const msg = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 4096,
-            temperature: 0.2,
-            system: systemPrompt,
-            messages: [
-                { role: 'user', content: `Here is the English resume text:\n\n${rawText}` }
-            ]
-        });
+        let userPrompt = buildInitialUserPrompt(rawText);
+        let translatedData: any = null;
+        let selectedModel: string | null = null;
+        let lastIssues: string[] = [];
 
-        const jsonStr = (msg.content[0] as any).text;
-        const translatedData = JSON.parse(jsonStr);
-        return res.json({ success: true, data: translatedData });
+        for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+            const { msg, model } = await createAnthropicMessageWithFallback(systemPrompt, userPrompt);
+            selectedModel = model;
+            console.log(`Anthropic generation model selected: ${model} (attempt ${attempt}/${MAX_GENERATION_ATTEMPTS})`);
+
+            const modelText = ((msg.content[0] as any)?.text ?? '') as string;
+            const jsonPayload = extractJsonObject(modelText);
+
+            if (!jsonPayload) {
+                lastIssues = ['AI response did not include valid JSON payload'];
+                continue;
+            }
+
+            try {
+                translatedData = JSON.parse(jsonPayload);
+                lastIssues = validateResumePayload(translatedData);
+                if (lastIssues.length === 0) {
+                    return res.json({ success: true, data: translatedData, meta: { model: selectedModel, attempt } });
+                }
+                userPrompt = buildRepairUserPrompt(rawText, jsonPayload, lastIssues);
+            } catch (parseError) {
+                console.error('AI JSON parse failed:', parseError);
+                lastIssues = ['AI returned malformed JSON'];
+            }
+        }
+
+        console.warn('Resume generation failed validation after retries:', lastIssues);
+        return res.status(502).json({
+            error: 'Failed to generate valid resume output after retries',
+            details: lastIssues.slice(0, 5)
+        });
 
     } catch (error) {
         console.error('Error generating resume:', error);

@@ -220,6 +220,13 @@ export function ResumePreview() {
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [errorMSG, setErrorMSG] = useState('');
+    const [generationMeta, setGenerationMeta] = useState<{ model?: string; attempt?: number } | null>(null);
+    const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
+    const [feedbackIssues, setFeedbackIssues] = useState<string[]>([]);
+    const [feedbackComment, setFeedbackComment] = useState('');
+    const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+    const [feedbackError, setFeedbackError] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -276,6 +283,7 @@ export function ResumePreview() {
                 }
 
                 setResumeData(normalizeResumeData(result.data));
+                setGenerationMeta(result.meta || null);
                 setIsUnlocked(true);
                 // Clear raw text, optionally save parsed if needed
                 localStorage.removeItem('rawResumeText');
@@ -291,6 +299,49 @@ export function ResumePreview() {
 
     const handlePrint = () => {
         window.print();
+    };
+
+    const toggleFeedbackIssue = (issue: string) => {
+        setFeedbackIssues((prev) => {
+            if (prev.includes(issue)) return prev.filter((x) => x !== issue);
+            if (prev.length >= 5) return prev;
+            return [...prev, issue];
+        });
+    };
+
+    const submitFeedback = async () => {
+        if (!feedbackRating) {
+            setFeedbackError('Please select a rating first.');
+            return;
+        }
+
+        setFeedbackSubmitting(true);
+        setFeedbackError('');
+        try {
+            const sessionId = localStorage.getItem('sessionId');
+            const response = await fetch('/api/public/resume-feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    formType: 'ResumeFeedback',
+                    rating: feedbackRating,
+                    issues: feedbackIssues,
+                    comment: feedbackComment,
+                    sessionId,
+                    generationModel: generationMeta?.model,
+                    generationAttempt: generationMeta?.attempt
+                })
+            });
+            const result = await response.json();
+            if (!response.ok || !result?.ok) {
+                throw new Error(result?.error || 'Failed to submit feedback');
+            }
+            setFeedbackSubmitted(true);
+        } catch (err: any) {
+            setFeedbackError(err.message || 'Failed to submit feedback');
+        } finally {
+            setFeedbackSubmitting(false);
+        }
     };
 
     // Use placeholder data to construct the blurred background if real data is not yet generated
@@ -331,6 +382,78 @@ export function ResumePreview() {
                         </div>
                     )}
                 </div>
+
+                {isUnlocked && (
+                    <div className="w-full mb-6 print:hidden">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                            <p className="text-slate-900 font-extrabold text-[16px] mb-2">How was this resume output?</p>
+                            <p className="text-slate-500 text-[13px] mb-4">Your feedback trains quality improvements for future generations.</p>
+
+                            {feedbackSubmitted ? (
+                                <div className="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-[13px] font-semibold">
+                                    Thank you. Your feedback was saved.
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex flex-wrap gap-2">
+                                        {[5, 4, 3, 2, 1].map((r) => (
+                                            <button
+                                                key={r}
+                                                onClick={() => setFeedbackRating(r)}
+                                                className={`px-3 py-2 rounded-lg text-[13px] font-bold border ${feedbackRating === r
+                                                    ? 'bg-blue-600 text-white border-blue-600'
+                                                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                                                    }`}
+                                            >
+                                                {r} / 5
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            ['tone', 'Tone mismatch'],
+                                            ['accuracy', 'Not accurate'],
+                                            ['missing_keywords', 'Missing keywords'],
+                                            ['format', 'Format issue'],
+                                            ['too_generic', 'Too generic'],
+                                            ['grammar', 'Grammar awkward'],
+                                            ['other', 'Other'],
+                                        ].map(([value, label]) => (
+                                            <button
+                                                key={value}
+                                                onClick={() => toggleFeedbackIssue(value)}
+                                                className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${feedbackIssues.includes(value)
+                                                    ? 'bg-slate-900 text-white border-slate-900'
+                                                    : 'bg-white text-slate-600 border-slate-300'
+                                                    }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <textarea
+                                        value={feedbackComment}
+                                        onChange={(e) => setFeedbackComment(e.target.value)}
+                                        placeholder="Optional: tell us what should be improved."
+                                        className="w-full min-h-[88px] border border-slate-300 rounded-xl px-3 py-2 text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                    />
+
+                                    {feedbackError && <p className="text-red-500 text-[12px] font-semibold">{feedbackError}</p>}
+
+                                    <button
+                                        onClick={submitFeedback}
+                                        disabled={feedbackSubmitting}
+                                        className="bg-slate-900 text-white px-4 py-2 rounded-lg text-[13px] font-bold disabled:opacity-60"
+                                    >
+                                        {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Resume Container */}
                 <div className="w-full bg-white text-slate-900 px-10 py-16 sm:px-16 sm:py-20 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.05)] border border-slate-100 relative rounded-2xl print:shadow-none print:p-8 print:border-none print:w-full print:rounded-none">

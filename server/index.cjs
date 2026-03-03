@@ -33,6 +33,214 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const MODEL_CANDIDATES = [
+  process.env.ANTHROPIC_MODEL,
+  'claude-3-5-sonnet-latest',
+  'claude-3-7-sonnet-latest',
+  'claude-sonnet-4-0',
+  'claude-sonnet-4-5',
+].filter(Boolean);
+const MAX_GENERATION_ATTEMPTS = 3;
+const ALLOWED_FEEDBACK_ISSUES = new Set([
+  'tone',
+  'accuracy',
+  'missing_keywords',
+  'format',
+  'too_generic',
+  'grammar',
+  'other',
+]);
+
+function extractJsonObject(text) {
+  if (!text || typeof text !== 'string') return null;
+
+  let candidate = text.trim();
+  if (candidate.startsWith('```')) {
+    candidate = candidate.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+
+  const firstBrace = candidate.indexOf('{');
+  const lastBrace = candidate.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
+
+  return candidate.slice(firstBrace, lastBrace + 1);
+}
+
+function isModelNotFoundError(err) {
+  const status = err?.status;
+  const apiType = err?.error?.error?.type || err?.error?.type;
+  const message = String(err?.message || err?.error?.error?.message || '');
+  return status === 404 || apiType === 'not_found_error' || message.includes('model:');
+}
+
+async function createAnthropicMessageWithFallback(systemPrompt, userPrompt) {
+  let lastError = null;
+  for (const model of MODEL_CANDIDATES) {
+    try {
+      const msg = await anthropic.messages.create({
+        model,
+        max_tokens: 4096,
+        temperature: 0.2,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }]
+      });
+      return { msg, model };
+    } catch (err) {
+      lastError = err;
+      if (isModelNotFoundError(err)) {
+        console.warn(`Anthropic model unavailable: ${model}. Trying next candidate...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error('No available Anthropic model candidates');
+}
+
+function validateResumePayload(data) {
+  const issues = [];
+  const isObj = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+  const isText = (v) => typeof v === 'string' && v.trim().length > 0;
+  const isTextArray = (v) => Array.isArray(v) && v.every((item) => typeof item === 'string');
+
+  if (!isObj(data)) return ['Payload is not a JSON object'];
+
+  if (!isObj(data.personalInfo)) {
+    issues.push('personalInfo must be an object');
+  } else {
+    if (!isText(data.personalInfo.name)) issues.push('personalInfo.name is required');
+    if (!isText(data.personalInfo.email)) issues.push('personalInfo.email is required');
+    if (!isText(data.personalInfo.summary) || data.personalInfo.summary.trim().length < 30) {
+      issues.push('personalInfo.summary must be at least 30 characters');
+    }
+  }
+
+  if (!Array.isArray(data.education) || data.education.length === 0) {
+    issues.push('education must be a non-empty array');
+  }
+
+  if (!Array.isArray(data.experience) || data.experience.length === 0) {
+    issues.push('experience must be a non-empty array');
+  } else {
+    data.experience.forEach((exp, i) => {
+      if (!isObj(exp)) {
+        issues.push(`experience[${i}] must be an object`);
+        return;
+      }
+      if (!Array.isArray(exp.projects) || exp.projects.length === 0) {
+        issues.push(`experience[${i}].projects must be a non-empty array`);
+        return;
+      }
+      exp.projects.forEach((proj, j) => {
+        if (!isObj(proj)) {
+          issues.push(`experience[${i}].projects[${j}] must be an object`);
+          return;
+        }
+        if (!isTextArray(proj.achievements) || proj.achievements.length < 2) {
+          issues.push(`experience[${i}].projects[${j}].achievements must have at least 2 bullet strings`);
+        }
+      });
+    });
+  }
+
+  if (!isTextArray(data.skills) || data.skills.length === 0) {
+    issues.push('skills must be a non-empty string array');
+  }
+  if (!isTextArray(data.keywords) || data.keywords.length === 0) {
+    issues.push('keywords must be a non-empty string array');
+  }
+  if (!isText(data.selfIntroduction) || data.selfIntroduction.trim().length < 200) {
+    issues.push('selfIntroduction must be at least 200 characters');
+  }
+
+  return issues;
+}
+
+function buildInitialUserPrompt(rawText) {
+  return `Here is the English resume text:
+
+${rawText}
+
+Hard constraints:
+- Use only facts grounded in the source text.
+- Do not invent metrics, employers, dates, or certifications.
+- If missing, keep fields empty string ("") or empty array ([]), but preserve full schema.`;
+}
+
+function buildRepairUserPrompt(rawText, previousJsonPayload, issues) {
+  return `Your previous JSON output failed validation. Fix it and return ONLY corrected JSON.
+
+Validation issues:
+${issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}
+
+Original English resume text:
+${rawText}
+
+Previous JSON output:
+${previousJsonPayload}
+
+Rules:
+- Preserve schema exactly.
+- Keep all facts grounded in source text.
+- No markdown, no explanations, output JSON object only.`;
+}
+
+function sanitizeString(v, max = 2000) {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+  return s.slice(0, max);
+}
+
+function sanitizeIssues(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter((x) => x && ALLOWED_FEEDBACK_ISSUES.has(x))
+    .slice(0, 5);
+}
+
+app.post('/api/public/resume-feedback', async (req, res) => {
+  try {
+    const rating = Number(req.body?.rating);
+    const issues = sanitizeIssues(req.body?.issues);
+    const comment = sanitizeString(req.body?.comment, 2000);
+    const sessionId = sanitizeString(req.body?.sessionId, 100);
+    const generationModel = sanitizeString(req.body?.generationModel, 120);
+    const generationAttempt = Number(req.body?.generationAttempt || 0);
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const ua = sanitizeString(req.headers['user-agent'], 400);
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ ok: false, error: 'rating must be an integer from 1 to 5' });
+    }
+
+    if (!supabaseAdmin) {
+      console.warn('resume-feedback skipped: supabase admin is not configured');
+      return res.status(200).json({ ok: true, stored: false });
+    }
+
+    const payload = {
+      created_at: new Date().toISOString(),
+      ip,
+      user_agent: ua,
+      session_id: sessionId,
+      rating,
+      issues,
+      comment,
+      generation_model: generationModel,
+      generation_attempt: Number.isFinite(generationAttempt) ? generationAttempt : null,
+    };
+
+    const { error } = await supabaseAdmin.from('resume_feedback_events').insert(payload);
+    if (error) throw new Error(error.message);
+    return res.status(200).json({ ok: true, stored: true });
+  } catch (error) {
+    console.error('Error storing resume feedback:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to store feedback' });
+  }
+});
+
 // Endpoint 1: Extract Text ONLY (Free, Fast, Upload phase)
 app.post('/api/parse-resume', upload.single('resume'), async (req, res) => {
   try {
@@ -113,6 +321,10 @@ app.post('/api/generate-resume', async (req, res) => {
       console.warn("No sessionId found in request, but orderId present. Allowing AI generation.");
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured on server' });
+    }
+
     // Prepare Prompt for Claude
     const systemPrompt = `You are an expert Korean Resume Translator and Career Consultant. 
 Your goal is to take the extracted text from an English PDF resume and convert it into a highly detailed, professional Korean Resume data format matching standard Korean corporate templates.
@@ -168,79 +380,40 @@ IMPORTANT: Respond ONLY with a valid JSON strictly following this structure. Do 
   "selfIntroduction": "Write a highly professional 3-4 paragraph '자기소개서' (Self Introduction Letter)."
 }`;
 
-    try {
-      const msg = await anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 4096,
-        temperature: 0.2,
-        system: systemPrompt,
-        messages: [
-          { role: "user", content: `Here is the English resume text:\n\n${rawText}` }
-        ]
-      });
+    let userPrompt = buildInitialUserPrompt(rawText);
+    let translatedData = null;
+    let selectedModel = null;
+    let lastIssues = [];
 
-      const jsonStr = msg.content[0].text;
-      const translatedData = JSON.parse(jsonStr);
-      return res.json({ success: true, data: translatedData });
-    } catch (apiError) {
-      console.error('Claude API Error, falling back to mock:', apiError);
+    for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+      const { msg, model } = await createAnthropicMessageWithFallback(systemPrompt, userPrompt);
+      selectedModel = model;
+      console.log(`Anthropic generation model selected: ${model} (attempt ${attempt}/${MAX_GENERATION_ATTEMPTS})`);
 
-      // MOCK FALLBACK for UI testing if API fails
-      const mockResult = {
-        "personalInfo": {
-          "name": "홍길동",
-          "gender": "남",
-          "birthYear": "1995년 (만 31세)",
-          "phone": "010-1234-5678",
-          "email": "gildong.hong@example.com",
-          "address": "서울특별시 강남구 테헤란로",
-          "summary": "글로벌 B2B SaaS 사업 마케터 및 전략 기획자. 다수의 마케팅 캠페인을 성공적으로 리드한 경험 보유."
-        },
-        "education": [
-          {
-            "schoolName": "한국국립대학교",
-            "degree": "대학교(4년)",
-            "major": "경영학과",
-            "period": "2014. 03 ~ 2020. 02",
-            "status": "졸업"
+      const modelText = msg.content?.[0]?.text || '';
+      const jsonPayload = extractJsonObject(modelText);
+      if (!jsonPayload) {
+        lastIssues = ['AI response did not include valid JSON payload'];
+      } else {
+        try {
+          translatedData = JSON.parse(jsonPayload);
+          lastIssues = validateResumePayload(translatedData);
+          if (lastIssues.length === 0) {
+            return res.json({ success: true, data: translatedData, meta: { model: selectedModel, attempt } });
           }
-        ],
-        "experience": [
-          {
-            "companyName": "NEXUS Tech",
-            "period": "2020.03 ~ 재직 중",
-            "totalDuration": "총 6년",
-            "projects": [
-              {
-                "projectName": "글로벌 마케팅 캠페인 총괄",
-                "period": "2022.01 ~ 현재",
-                "role": "Marketing Director",
-                "achievements": [
-                  "글로벌 B2B 클라이언트 타겟팅 및 디지털 마케팅 전략 수립",
-                  "신규 시장 진출 후 MAU 250% 상승 견인",
-                  "연간 리드 생성 파이프라인 최적화 프로젝트 성공"
-                ]
-              },
-              {
-                "projectName": "국내 파트너십 제휴 및 온보딩",
-                "period": "2020.03 ~ 2021.12",
-                "role": "Partnership Manager",
-                "achievements": [
-                  "국내 대기업 대상 전략적 파트너십 구축",
-                  "제휴사 만족도 프로세스 개선으로 이탈률 15% 감소"
-                ]
-              }
-            ]
-          }
-        ],
-        "extracurricular": [],
-        "certifications": ["PMP", "Google Analytics 연수"],
-        "skills": ["디지털 마케팅", "B2B 세일즈 전략", "프로젝트 관리", "데이터 분석", "SEO/SEM", "Python", "SQL"],
-        "keywords": ["리더십", "책임감", "도전적", "논리적", "유연성", "커뮤니케이션 능력"],
-        "selfIntroduction": "경영학과 출신으로 폭넓은 비즈니스 케이스 스터디 기반의 유연한 문제 해결 능력을 갖추었습니다. 초기 커리어를 NEXUS Tech 파트너십 부문에서 시작하여 다양한 산업군의 파트너 기업들과 긴밀하게 소통하며 신뢰를 구축해 왔습니다.\n\n이를 기반으로 현재 글로벌 마케팅 디렉터 역할을 완수하며 급변하는 B2B 소프트웨어 시장에 선제적으로 대응하는 전략을 기획하고 있습니다. 특히 데이터를 기반으로 한 합리적인 의사결정 프로세스를 도입하여, 한정된 마케팅 예산 대비 최고 효율을 창출한 다수의 캠페인 사례를 이끌었습니다.\n\n앞으로도 실무 현장에서의 인사이트와 탁월한 대내외 커뮤니케이션 능력을 발휘하여, 글로벌 IT 생태계를 리딩하는 경쟁력 있는 비즈니스 전문가로서 성장해 나가고자 합니다."
-      };
-      return res.json({ success: true, data: mockResult, isMock: true });
+          userPrompt = buildRepairUserPrompt(rawText, jsonPayload, lastIssues);
+        } catch (parseError) {
+          console.error('AI JSON parse failed:', parseError);
+          lastIssues = ['AI returned malformed JSON'];
+        }
+      }
     }
+
+    console.warn('Resume generation failed validation after retries:', lastIssues);
+    return res.status(502).json({
+      error: 'Failed to generate valid resume output after retries',
+      details: lastIssues.slice(0, 5)
+    });
   } catch (error) {
     console.error('Error generating resume:', error);
     return res.status(500).json({ error: 'Failed to generate resume' });
