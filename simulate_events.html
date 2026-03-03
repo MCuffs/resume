@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>ThinkingData Event Simulator</title>
+    <script>
+    !functi on( e ){ if(!window.thinkingdat a ){window.thinkingda t a= e;var   n=["init ","track ","quick ","login ","logout ","setSuperProperties ","clearSuperProperties ","unsetSuperProperties ","setProperty ","setOnceProfile ","appendProfile ","incrementProfile ","deleteProfile ","unsetProfile ","identify ","timeEvent ","trackLink ","userSet ","userSetOnce ","userAdd ","userDel ","userUnset ","auth ","authorize ","cancelAuth ","getPresetProperties" ];window.thinkingdata . t={ };f or(var   i= 0 ; i<n.lengt h;i++)!functi on( t ){window.thinkingdata[ t ]=functi on ( ){window.thinkingdata.t[ t ]=argumen t s}}(n[i] );window.thinkingdata.in i t=functi on( t ){window.thinkingdata.t.in i t=argumen t s }}}({})    </script>
+    <script async src="https://assets.thinkingdata.cn/sdk/thinkingdata.min.js"></script>
+    <script>
+    thinkingdata.init(              appId: "65f9109c49d142ba873ffd539f3f85cb"              serverUrl: "https://te-receiver-naver.thinkingdata.kr"              autoTrack: { pageShow: true           })    </script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .log {
+            background: #f0f0f0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: monospace;
+            margin-top: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ThinkingData Event Simulator</h1>
+    <p>Sending 10 sample events for each type...</p>
+    <div id="log" class="log">Initializing...</div>
+
+    <script>
+    const logDiv = document.getElementById('log');
+    function log(m        {
+        logDiv.innerHTML += `<div>${msg}</div>`;
+        logDiv.scrollTop = logD        crollHeight;
+                unction randomInt(min, m            turn Math.floor(Math.random() * (max - min +            n); }
+    function randomItem(arr) { return ar            loor(Math.random() * arr.length)]; }
+
+                ENTS = {
+        NAV_CLICK: 'nav_click',
+               TACT_FORM_SUBMIT: 'contact_form_sub        ,
+            CREATOR_APPLY_SUBMIT            or_apply_submit',
+        BRAND_APPLY_SUBMIT:a            mit',
+        EX            INK_CLICK: 'external_link_click',
+        PLATFORM_SELECT: 'platform_select'
+    }            unc tion s e ndDa t a() {
+                     rating events...");
+        
+        //                          const menus = ['Creators                    ntact', 'About', 'Blog', 'How it works'];
+        for(let i=0;                {
+                            data.track(EVENTS.NAV_CLICK, {
+                    menu_name: randomItem(                            location: Math.random() > 0.5 ? 'desktop_nav'            le_ menu'
+                });
+                      log("✅ Sent 10 nav_click");
+
+        // 2. c                    it
+        const categories = ['Ge                    ', 'Brand', 'Other'];
+        for(                    ++) {
+            thinkingdata.trac                TACT            BM                          category: randomItem(categories                       subject_length:             t(5, 50),
+                message_length:            nt(20, 500)
+            });
+        }
+        log("✅ Sent 10 contact_for            "); 
+
+          / /  3. creator                t
+        const platforms = ['tiktok', 'threads'];                    reatorCats = ['Beauty', 'Fashion'                    tyle', 'Tech'];
+        for(let i=0                               thinkingdat                TS.C            PP            T, {
+                platform: randomItem(plat                            category:            tem(creatorCats),
+                has_channel_ur                        });
+        }
+        log("✅ Sent 10 creator_apply_            ;
+
+           //  4 . brand_app                      const goals = ['sales', 'branding', 'traff                    nst budgets = ['under_5m', '5m_10m                    ver_30m'];
+        for(let i=0; i<1                          thinkingdata.track(EVENTS.BRAND_                , {
+                          mpaign_goal: randomItem(goals),
+                        et_range: randomItem(budge                            w e bsite_provi                ndom() > 0.1
+            });
+        }
+        lo                    nd_apply_submit");
+
+                            ink_click
+        for(let                i++)                          nkingdata.track(EVENTS.EXTERNAL_LINK_CLICK,               link_name: 'kakao_cha                              l ocation: 'c                
+            });
+        }
+        log("✅ Sen                    nk_click");
+        
+        //                 sele                          t i=0; i<10; i++) {
+            thinkingd            k(EVENTS.PLATFORM_SELECT, {
+                platform: randomItem(platform                   });
+        }
+             og(        ent 10 platform_select");
+
+              g("<br><span class='success' Avents have been sent successfully!</span>");
+        log("Check your ThinkingData dashboard.");
+    }
+
+    // Wait for SDK to load
+    setTimeout(sendData, 2000);
+    </script>
+</body>
+
+</html>

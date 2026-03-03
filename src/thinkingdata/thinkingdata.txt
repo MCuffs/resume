@@ -1,0 +1,177 @@
+JavaScript
+참고
+SDK를 통합하기 전에 데이터 전송 준비 문서를 먼저 확인하세요.
+JavaScript SDK는 브라우저 환경에서 동작하며, IE 8 및 그 이하 버전은 지원하지 않습니다.
+JavaScript SDK의 용량은 약 35KB입니다.
+최신 버전: v2.2.1
+업데이트 날짜: 2025-11-11
+리소스 다운로드: [소스 코드, SDK 다운로드]
+주의
+이 문서는 v2.0.0 이상 버전에 적용됩니다. 이전 버전에 대해서는 JS 통합 가이드(V1)，SDK 다운로드(V1)를 참고하세요.
+1. SDK 통합
+1.1 자동 통합
+Copy
+npm install thinkingdata-browser --save
+다음으로 SDK를 초기화하기 시작합니다. 구체적인 구성 파라미터는 위의 두 번째 단계를 참조해 주세요.
+Copy
+import thinkingdata from "thinkingdata-browser";
+var config = {
+    appId: "APP_ID",
+    serverUrl: "https://YOUR_SERVER_URL",
+    autoTrack: {
+        pageShow: true, // 페이지 표시 이벤트를 활성화합니다. 이벤트 이름: ta_page_show
+        pageHide: true, // 페이지 숨김 이벤트를 활성화합니다. 이벤트 이름: ta_page_hide
+    }
+};
+thinkingdata.init(config);
+1.2 수동 통합
+단계 1: JavaScript SDK 다운로드 JavaScript SDK
+압축 파일에는 두 가지 규격의 스크립트가 제공됩니다. 필요에 따라 원하는 스크립트를 선택할 수 있습니다. 아래에서 설명하는 비동기 로딩에는 thinkingdata.min.js 파일을 사용해야 하며, 동기 로딩에는 thinkingdata.umd.min.js를 사용해야 합니다.
+단계 2: JavaScript SDK 로딩
+SDK를 비동기 로딩 또는 동기 로딩 방식으로 사용할 수 있습니다. 두 방식은 실제 사용에서 큰 차이가 없으므로 둘 중 하나를 선택할 수 있습니다.
+SDK를 초기화할 때 몇 가지 구성 파라미터를 전달해야 합니다:
+•
+appId: 프로젝트의 APP_ID로, TE 프로젝트 관리 페이지에서 확인할 수 있습니다.
+•
+serverUrl: 데이터 전송 URL
+•
+SaaS(클라우드 서비스)를 사용하는 경우, 프로젝트 관리 → 프로젝트 설정 → 구성에서 데이터 전송 주소를 확인하세요.
+•
+프라이빗(온프레미스) 배포 버전을 사용하는 경우, 데이터 전송 주소를 직접 설정할 수 있습니다.
+비동기 로딩
+동기 로딩
+비동기 로딩의 경우 thinkingdata.min.js를 사용하며, 아래 코드를 HTML의 <head> 또는 기타 초기화 코드에 삽입하고 해당 파라미터를 설정하세요:
+Copy
+<!--Thinking Analytics SDK BEGIN-->
+<script>
+    !function (e) { if (!window.ThinkingDataAnalyticalTool) { var n = e.sdkUrl, t = e.name, r = window, a = document, i = "script", l = null, s = null; r.ThinkingDataAnalyticalTool = t; var o = ["track", "quick", "login", "identify", "logout", "trackLink", "userSet", "userSetOnce", "userAdd", "userDel", "setPageProperty", "setSuperProperties", "setDynamicSuperProperties", "clearSuperProperties", "timeEvent", "unsetSuperProperties", "initInstance", "trackFirstEvent", "trackUpdate", "trackOverwrite"]; r[t] = function (e) { return function () { if (this.name) (r[t]._q = r[t]._q || []).push([e, arguments, this.name]); else if ("initInstance" === e) { var n = arguments[0]; r[t][n] = { name: n }; for (var a = 0; a < o.length; a++)r[t][n][o[a]] = r[t].call(r[t][n], o[a]); (r[t]._q1 = r[t]._q1 || []).push([e, arguments]) } else (r[t]._q = r[t]._q || []).push([e, arguments]) } }; for (var u = 0; u < o.length; u++)r[t][o[u]] = r[t].call(null, o[u]); r[t].param = e, r[t].__SV = 1.1, l = a.createElement(i), s = a.getElementsByTagName(i)[0], l.async = 1, l.src = n, s.parentNode.insertBefore(l, s) } }(
+    {
+        appId: 'APP_ID', // 시스템에서 할당된 APPID
+        name: 'ta', // 전역 호출 변수명, 임의로 설정 가능하며 이후 호출 시 이 이름을 사용
+        sdkUrl: './thinkingdata.min.js', // 통계 스크립트 URL
+        serverUrl: 'https://YOUR_SERVER_URL', // 데이터 전송 URL
+        autoTrack: {
+           pageShow: true, // 페이지 표시 이벤트를 활성화합니다. 이벤트 이름: ta_page_show
+           pageHide: true, // 페이지 숨김 이벤트를 활성화합니다. 이벤트 이름: ta_page_hide
+        },
+        loaded: function(ta) {
+           // var currentId = ta.getDistinctId();
+           // ta.identify(currentId);
+           // ta.quick('autoTrack');
+        }
+    });
+</script>
+<!--Thinking Analytics SDK END-->
+비동기 로딩 고유 파라미터 설명:
+•
+name: 전역 호출 변수명
+•
+sdkUrl: SDK의 URL, 설정 필요
+•
+loaded: 초기화 콜백 함수. 코드 조각을 통해 로딩이 비동기 방식이므로, 반환값이 있는 메서드 호출이 실패하거나 SDK 로딩 완료 전에 호출된 track에서 이상이 발생할 수 있습니다. 이를 위해 loaded 속성을 제공하며, 이 속성의 콜백 함수는 초기화 완료 후 데이터 전송 시작 전에 호출됩니다. 예를 들어, 여기서 유저 ID를 설정하면 SDK 로딩 전에 생성된 데이터에도 해당 유저 ID가 설정됩니다.
+2. 주요 기능
+기본 기능을 사용하기 전에, 먼저 유저 식별 규칙을 이해하는 것이 좋습니다.
+SDK는 기본적으로 랜덤값을 생성하여 게스트 ID로 사용하며, 이를 로컬에 영구 저장합니다. 유저가 로그인하기 전까지는 게스트 ID가 식별 ID 로 사용됩니다.
+2.1 계정 ID 설정
+유저가 로그인할 때 login을 호출하여 계정 ID를 설정할 수 있습니다.
+TE 플랫폼은 계정 ID를 식별 ID 로 사용하며, logout을 호출하기 전까지 유지됩니다. login을 여러 번 호출하면 이전 계정 ID가 덮어쓰입니다.
+Copy
+// 유저의 로그인 고유 식별자, 이 데이터는 전송 데이터의 #account_id에 해당하며, 이때 #account_id 값은 TA입니다.
+ta.login("TA");
+이 메서드는 로그인 이벤트를 전송하지 않습니다.
+2.2 공통 이벤트 속성 설정
+공통 이벤트 속성이란 모든 이벤트에 자동으로 포함되는 속성을 의미합니다.
+setSuperProperties 메서드를 호출하여 공통 이벤트 속성을 설정할 수 있으며, 이벤트를 전송하기 전에 먼저 설정하는 것을 권장합니다.
+예를 들어, 유저의 회원 등급, 유입 채널과 같은 중요한 속성은 모든 이벤트에서 필요할 수 있습니다. 이 경우, 해당 속성을 공통 이벤트 속성으로 설정하면 모든 이벤트에 자동으로 포함됩니다.
+Copy
+var superProperties = {};
+superProperties["channel"] = "ta"; // String
+superProperties["age"] = 1; // Number
+superProperties["isSuccess"] = true; // Boolean
+superProperties["birthday"] = new Date(); // Date
+superProperties["object"] = {key: "value"}; // Object
+superProperties["object_arr"] = [{key: "value"}]; // Object array
+superProperties["arr"] = ["value"]; // Array
+ta.setSuperProperties(superProperties); // 공통 이벤트 속성 설정
+공통 이벤트 속성은 앱이 다시 실행될 때마다 설정할 필요 없이 캐시에 저장됩니다. 이미 설정된 공통 이벤트 속성을 setSuperProperties로 다시 설정하면, 기존 값이 덮어쓰기(업데이트)됩니다.
+•
+Key(속성명):
+•
+문자열 타입이며 영문자로 시작해야 합니다.
+•
+숫자, 영문자, 밑줄(_)을 포함할 수 있습니다.
+•
+최대 길이는 50자이며, 대소문자는 구분되지 않습니다. (TE 시스템에서 자동으로 소문자로 변환)
+•
+Value(속성값):
+•
+String(문자열), Number(숫자), Boolean(불리언), Date(시간), Object(객체), Object Array(객체 배열), Array(배열) 지원
+이벤트 속성, 유저 속성의 요구사항은 공통 이벤트 속성과 동일합니다.
+2.3 이벤트 전송
+이벤트는 track을 호출하여 전송할 수 있습니다. 데이터 플랜을 미리 준비한 후 이벤트를 전송하세요. 예시로, 아이템 구매 이벤트를 다음과 같이 전송할 수 있습니다.
+Copy
+ta.track(
+"product_buy", //이벤트 이름
+ //이벤트 속성
+ {product_name:"상품명"});
+이벤트 이름 규칙:
+•
+문자열 타입이어야 합니다.
+•
+영문자로 시작해야 하며, 숫자, 영문자, 밑줄(_)을 포함할 수 있습니다.
+•
+최대 길이는 50자이며, 대소문자는 구분되지 않습니다.
+Array(배열) 타입은 SDK 버전 1.6.0 이상에서 지원하며, TE 플랫폼 버전 2.5 이상과 함께 사용해야 합니다.
+Object 타입은 TE 플랫폼 버전 3.5 이상과 함께 사용해야 합니다.
+2.4 유저 속성 설정
+유저 속성을 설정하려면 userSet 메서드를 호출합니다.
+•
+이 메서드를 사용하면 기존 속성 값이 덮어쓰기(업데이트) 됩니다.
+•
+만약 해당 유저 속성이 기존에 없었다면, 새로운 속성으로 추가됩니다.
+•
+속성 타입은 전달된 값과 동일하게 저장됩니다.
+아래 예제는 유저 이름(username) 속성을 설정하는 방법을 보여줍니다.
+Copy
+// username이 TA
+ta.userSet({ username: "TA" });
+// username이 TE
+ta.userSet({ username: "TE" });
+3. 코드 예시
+다음 예제 코드는 앞서 설명한 모든 기능을 포함하고 있으며, 아래 순서대로 코드를 구성하는것을 권장합니다.
+Copy
+import thinkingdata from "thinkingdata-browser";
+
+var config = {
+    appId: "APP_ID",
+    serverUrl: "https://YOUR_SERVER_URL/sync_js",
+    autoTrack: {
+        pageShow: true, // 활성화 시 페이지 표시 이벤트가 트래킹됩니다. 이벤트 이름: ta_page_show  
+        pageHide: true, // 활성화 시 페이지 숨김 이벤트가 트래킹됩니다. 이벤트 이름: ta_page_hide  
+    }
+};
+window.ta = thinkingdata;
+// 1. SDK 초기화
+ta.init(config);
+
+// 2. 유저가 로그인한 경우, 계정 ID를 고유 식별자로 설정할 수 있습니다.
+ta.login("TA");
+
+// 3. 공통 이벤트 속성 설정
+var superProperties = {};
+superProperties["channel"] = "ta"; // string  
+superProperties["age"] = 1; // number  
+superProperties["isSuccess"] = true; // boolean  
+superProperties["birthday"] = new Date(); // date  
+superProperties["object"] = {key: "value"}; // object  
+superProperties["object_arr"] = [{key: "value"}]; // object array
+superProperties["arr"] = ["value"]; // array  
+ta.setSuperProperties(superProperties); // 공통 이벤트 속성 설정
+
+// 4. 이벤트 전송
+ta.track("product_buy", // event name  
+    // event properties  
+    {product_name: "상품 이름"});  
+
+// 5. 유저 속성 설정
+ta.userSet({username: "TA"});

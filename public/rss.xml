@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Arthurian Studio Blog</title>
+    <link>https://www.arthrian.cloud</link>
+    <description>Arthurian Studio helps creators grow beyond platforms.</description>
+    <language>ko</language>
+    <atom:link href="https://www.arthrian.cloud/rss.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title><![CDATA[아서리안과 함께한 후백(Hu100)의 스레드 마케팅 후기]]></title>
+      <link>https://www.arthrian.cloud/blog/hu100-marketing-case</link>
+      <guid>https://www.arthrian.cloud/blog/hu100-marketing-case</guid>
+      <description><![CDATA[100세까지 건강하게, Hu100. 화려한 영상 광고 대신 진정성 있는 텍스트 마케팅으로 찐팬을 모은 실제 사례를 공개합니다.]]></description>
+      <pubDate>Mon, 02 Feb 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[아서리안이 스레드(Threads) 전문 에이전시가 된 이유]]></title>
+      <link>https://www.arthrian.cloud/blog/why-we-pivoted-to-threads</link>
+      <guid>https://www.arthrian.cloud/blog/why-we-pivoted-to-threads</guid>
+      <description><![CDATA[모두가 숏폼 중독을 외칠 때, 우리는 왜 텍스트로 돌아갔을까요? 도파민의 시대, 진정성 있는 텍스트가 가진 힘에 대해 이야기합니다.]]></description>
+      <pubDate>Mon, 02 Feb 2026 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
