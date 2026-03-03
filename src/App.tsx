@@ -6,6 +6,8 @@ import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
 import { ResumePreview } from './pages/ResumePreview';
 import { ConsultingDashboard } from './pages/ConsultingDashboard';
+import { BlogListPage } from './pages/BlogListPage';
+import { BlogPostPage } from './pages/BlogPostPage';
 
 class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
@@ -51,6 +53,8 @@ export default function App() {
         <main className="min-h-screen">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/blog" element={<BlogListPage />} />
+            <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="/preview" element={<ResumePreview />} />
             <Route path="/dashboard/consulting" element={<ConsultingDashboard />} />
           </Routes>

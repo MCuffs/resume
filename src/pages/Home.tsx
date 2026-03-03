@@ -298,13 +298,19 @@ export function Home() {
                 <div className="max-w-[1400px] w-full flex items-center justify-between">
                     <div className="flex items-center gap-10">
                         {/* Logo */}
-                        <div className="font-extrabold text-[20px] tracking-tight flex items-center gap-2 text-[#29AEE1]">
+                        <button onClick={() => navigate('/')} className="font-extrabold text-[20px] tracking-tight flex items-center gap-2 text-[#29AEE1]">
                             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                             </svg>
                             ARTHURIAN
-                        </div>
+                        </button>
                         {/* Links */}
+                        <button
+                            onClick={() => navigate('/blog')}
+                            className="text-[14px] font-bold text-[#556987] hover:text-[#112E51] transition-colors"
+                        >
+                            Blog
+                        </button>
                     </div>
                 </div>
             </header>
