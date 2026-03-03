@@ -308,9 +308,20 @@ export function ResumePreview() {
                     body: JSON.stringify({ rawText, sessionId, orderId })
                 });
 
-                const result = await response.json();
+                const raw = await response.text();
+                let result: any = null;
+                try {
+                    result = raw ? JSON.parse(raw) : null;
+                } catch {
+                    result = null;
+                }
+
                 if (!response.ok) {
-                    throw new Error(result.error || 'Failed to generate resume');
+                    throw new Error(
+                        result?.error ||
+                        (raw && raw.length < 300 ? raw : '') ||
+                        'Failed to generate resume'
+                    );
                 }
 
                 setResumeData(normalizeResumeData(result.data));
