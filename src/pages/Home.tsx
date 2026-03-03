@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export function Home() {
@@ -11,6 +11,11 @@ export function Home() {
     const [consultingLoading, setConsultingLoading] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
     const navigate = useNavigate();
+
+    // Clear any leftover demo data when Home mounts (e.g. user came back from demo preview)
+    useEffect(() => {
+        localStorage.removeItem('parsedResume');
+    }, []);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -26,6 +31,10 @@ export function Home() {
 
         setLoading(true);
         setErrorMSG('');
+
+        // Clear demo data immediately before upload starts
+        localStorage.removeItem('parsedResume');
+        localStorage.removeItem('rawResumeText');
 
         const uploadData = new FormData();
         uploadData.append('resume', file);
