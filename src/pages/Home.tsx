@@ -296,8 +296,8 @@ export function Home() {
             <div className="bg-[#041B3B] text-white text-[12px] py-2 px-6 shadow-sm flex items-center justify-center md:justify-between font-medium tracking-wide">
                 <div className="hidden md:flex flex-1"></div>
                 <div className="flex items-center gap-2">
-                    <span className="text-[#29AEE1] font-black text-sm">&gt;</span> Build your career in Korea right now! Data & AI-driven Resume Pipeline.
-                    <button className="ml-2 hover:underline decoration-[#29AEE1] underline-offset-4">Learn more</button>
+                    <span className="text-[#29AEE1] font-black text-sm">&gt;</span> Check if you qualify for an F-2-7 Resident Visa in 1 minute!
+                    <button onClick={() => navigate('/visa-calculator')} className="ml-2 hover:underline decoration-[#29AEE1] underline-offset-4 cursor-pointer font-bold">Calculate Points</button>
                 </div>
                 <div className="hidden md:flex flex-1 justify-end">
                     <button className="text-white hover:text-gray-300 transition-colors">

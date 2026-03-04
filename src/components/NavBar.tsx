@@ -74,6 +74,10 @@ export function NavBar() {
                             Blog
                         </NavLink>
 
+                        <NavLink to="/visa-calculator" className={({ isActive }) => `text-[13px] font-bold tracking-wide transition-colors bg-[#EEF7FF] text-[#1E6EA1] hover:bg-[#D9F3FF] px-3 py-1.5 rounded-full ${isActive ? 'ring-2 ring-[#29AEE1]/50' : ''}`}>
+                            Visa Form
+                        </NavLink>
+
                         <NavLink to="/dashboard" className={({ isActive }) => `text-sm font-medium transition-colors hover:text-black ${isActive ? 'text-black' : 'text-neutral-500'}`}>
                             Dashboard
                         </NavLink>
@@ -138,6 +142,7 @@ export function NavBar() {
                             <NavLink to="/series" className={({ isActive }) => isActive ? 'text-red-600' : 'text-neutral-900'}>Series</NavLink>
 
                             <NavLink to="/blog" className={({ isActive }) => isActive ? 'text-red-600' : 'text-neutral-900'}>Blog</NavLink>
+                            <NavLink to="/visa-calculator" className={({ isActive }) => isActive ? 'text-[#29AEE1]' : 'text-[#1E6EA1] font-extrabold'}>Visa Calculator</NavLink>
                             <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'text-red-600' : 'text-neutral-900'}>Dashboard</NavLink>
                             <NavLink to="/contact" className={({ isActive }) => isActive ? 'text-red-600' : 'text-neutral-900'}>Contact</NavLink>
                         </nav>

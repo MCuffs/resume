@@ -8,6 +8,7 @@ import { ResumePreview } from './pages/ResumePreview';
 import { ConsultingDashboard } from './pages/ConsultingDashboard';
 import { BlogListPage } from './pages/BlogListPage';
 import { BlogPostPage } from './pages/BlogPostPage';
+import { VisaCalculator } from './pages/VisaCalculator';
 
 class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="/preview" element={<ResumePreview />} />
             <Route path="/dashboard/consulting" element={<ConsultingDashboard />} />
+            <Route path="/visa-calculator" element={<VisaCalculator />} />
           </Routes>
         </main>
       </AppErrorBoundary>
