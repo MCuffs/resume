@@ -27,7 +27,7 @@ export function BlogListPage() {
         <div className="mb-10">
           <p className="text-[12px] uppercase tracking-[0.18em] font-bold text-[#29AEE1] mb-2">Blog</p>
           <h1 className="text-[36px] font-extrabold tracking-tight mb-3">Korean Career Insights</h1>
-          <p className="text-[16px] text-[#556987]">한국 취업을 준비하는 외국인을 위한 실전형 Resume/Interview 가이드입니다.</p>
+          <p className="text-[16px] text-[#556987]">Practical Korean resume tips, interview strategies, and actionable guidance for a successful career in Korea.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -37,7 +37,14 @@ export function BlogListPage() {
               to={`/blog/${post.slug}`}
               className="block bg-white rounded-2xl border border-slate-200 hover:border-[#29AEE1]/40 hover:shadow-lg transition-all"
             >
-              <div className={`h-36 rounded-t-2xl bg-gradient-to-br ${post.coverGradient} border-b border-slate-100`} />
+              {post.coverImage ? (
+                <div
+                  className="h-48 rounded-t-2xl border-b border-slate-100 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${post.coverImage})` }}
+                />
+              ) : (
+                <div className={`h-48 rounded-t-2xl bg-gradient-to-br ${post.coverGradient} border-b border-slate-100`} />
+              )}
               <div className="p-6">
                 <div className="flex items-center gap-2 text-[12px] text-slate-500 font-semibold mb-3">
                   <span>{post.publishedAt}</span>

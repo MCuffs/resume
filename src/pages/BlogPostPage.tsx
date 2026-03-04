@@ -35,6 +35,11 @@ export function BlogPostPage() {
           <div className="text-[13px] text-slate-500 font-semibold mb-8">
             {post.publishedAt} • {post.readMinutes} min read
           </div>
+          {post.coverImage && (
+            <div className="mb-10 w-full overflow-hidden rounded-xl shadow-sm border border-slate-100 h-[250px] md:h-[400px]">
+              <img src={post.coverImage} alt={post.title} className="w-full h-full object-cover" />
+            </div>
+          )}
 
           <div className="space-y-5 text-[17px] leading-[1.9] text-[#223D5D]">
             {post.content.map((paragraph, index) => (
