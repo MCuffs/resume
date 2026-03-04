@@ -34,6 +34,19 @@ export const Analytics = {
         HERO_CTA_CLICK: 'hero_cta_click',
         SECTION_VIEW: 'section_view',
         TAB_CLICK: 'tab_click',
-        SHOWCASE_CARD_CLICK: 'showcase_card_click'
+        SHOWCASE_CARD_CLICK: 'showcase_card_click',
+        // Resume Flow Events
+        RESUME_UPLOAD_START: 'resume_upload_start',
+        RESUME_PARSED_SUCCESS: 'resume_parsed_success',
+        RESUME_PARSED_ERROR: 'resume_parsed_error',
+        RESUME_GENERATION_START: 'resume_generation_start',
+        RESUME_GENERATION_SUCCESS: 'resume_generation_success',
+        RESUME_GENERATION_ERROR: 'resume_generation_error',
+        RESUME_DOWNLOAD_CLICK: 'resume_download_click',
+        VIEW_DEMO_CLICK: 'view_demo_click',
+        // Consulting Events
+        CONSULTING_INQUIRE_OPEN: 'consulting_inquire_open',
+        CONSULTING_INQUIRE_SUBMIT: 'consulting_inquire_submit',
+        CONSULTING_PAYMENT_COMPLETE: 'consulting_payment_complete'
     }
 };

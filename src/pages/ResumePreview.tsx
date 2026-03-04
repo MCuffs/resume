@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PayPalScriptProvider, PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
+import { Analytics } from '../utils/analytics';
 
 type ResumeData = {
     personalInfo: {
@@ -328,6 +329,7 @@ export function ResumePreview() {
 
         if (rawText) {
             setIsGenerating(true);
+            Analytics.track(Analytics.Events.RESUME_GENERATION_START);
             setErrorMSG('');
             try {
                 // Get the pending transaction sessionId from localStorage
@@ -359,11 +361,13 @@ export function ResumePreview() {
                 setResumeData(normalizeResumeData(result.data));
                 setGenerationMeta(result.meta || null);
                 setIsUnlocked(true);
+                Analytics.track(Analytics.Events.RESUME_GENERATION_SUCCESS, { model: result.meta?.model, input_length: rawText.length });
                 // Clear raw text, optionally save parsed if needed
                 localStorage.removeItem('rawResumeText');
 
             } catch (err: any) {
                 console.error(err);
+                Analytics.track(Analytics.Events.RESUME_GENERATION_ERROR, { error_message: err.message });
                 setErrorMSG(err.message || 'Error occurred during AI Generation.');
             } finally {
                 setIsGenerating(false);
@@ -410,6 +414,7 @@ export function ResumePreview() {
     };
 
     const handlePrint = () => {
+        Analytics.track(Analytics.Events.RESUME_DOWNLOAD_CLICK);
         clearFeedbackTimers();
         setShowFeedbackPrompt(false);
         setShowDownloadConfirmPrompt(false);

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PayPalButtons, PayPalScriptProvider, usePayPalScriptReducer } from '@paypal/react-paypal-js';
 import { Helmet } from 'react-helmet-async';
+import { Analytics } from '../utils/analytics';
 
 type ConsultingServiceKey = 'review' | 'interview';
 
@@ -104,6 +105,8 @@ export function Home() {
             return;
         }
 
+        Analytics.track(Analytics.Events.RESUME_UPLOAD_START, { file_name: file.name, file_size: file.size });
+
         setLoading(true);
         setErrorMSG('');
 
@@ -127,6 +130,7 @@ export function Home() {
 
             // Save the extracted raw text and the pending transaction sessionId. Actual AI generation happens AFTER payment on the next page.
             localStorage.removeItem('parsedResume'); // Clear any leftover demo data
+            Analytics.track(Analytics.Events.RESUME_PARSED_SUCCESS, { text_length: result.text.length });
             localStorage.setItem('rawResumeText', result.text);
             if (result.sessionId) {
                 localStorage.setItem('sessionId', result.sessionId);
@@ -134,6 +138,7 @@ export function Home() {
             navigate('/preview');
         } catch (err: any) {
             console.error(err);
+            Analytics.track(Analytics.Events.RESUME_PARSED_ERROR, { error_message: err.message });
             setErrorMSG(err.message || 'Server error occurred.');
         } finally {
             setLoading(false);
@@ -156,6 +161,7 @@ export function Home() {
 
     const openPaymentModal = (serviceKey: ConsultingServiceKey) => {
         const plan = CONSULTING_SERVICES[serviceKey];
+        Analytics.track(Analytics.Events.CONSULTING_INQUIRE_OPEN, { service: plan.label });
         setSelectedService(plan.label);
         setSelectedServicePrice(plan.krwPrice);
         setSelectedServiceUsdPrice(plan.usdPrice);
@@ -177,6 +183,7 @@ export function Home() {
             setConsultingError('Please add your request details before continuing.');
             return;
         }
+        Analytics.track(Analytics.Events.CONSULTING_INQUIRE_SUBMIT, { service: selectedService });
         setConsultingError('');
         setConsultingStep('payment');
     };
@@ -220,6 +227,7 @@ export function Home() {
             if (result?.requestId) {
                 setPaymentReference(result.requestId);
             }
+            Analytics.track(Analytics.Events.CONSULTING_PAYMENT_COMPLETE, { service: selectedService, request_id: result?.requestId || '' });
             setConsultingStep('done');
         } catch (error: any) {
             console.error("Submission failed", error);
@@ -487,6 +495,7 @@ export function Home() {
                                     "keywords": ["리더십", "책임감", "도전적", "논리적", "유연성", "커뮤니케이션 능력"],
                                     "selfIntroduction": "경영학과 출신으로 폭넓은 비즈니스 케이스 스터디 기반의 유연한 문제 해결 능력을 갖추었습니다. 초기 커리어를 NEXUS Tech 파트너십 부문에서 시작하여 다양한 산업군의 파트너 기업들과 긴밀하게 소통하며 신뢰를 구축해 왔습니다.\n\n이를 기반으로 현재 글로벌 마케팅 디렉터 역할을 완수하며 급변하는 B2B 소프트웨어 시장에 선제적으로 대응하는 전략을 기획하고 있습니다. 특히 데이터를 기반으로 한 합리적인 의사결정 프로세스를 도입하여, 한정된 마케팅 예산 대비 최고 효율을 창출한 다수의 캠페인 사례를 이끌었습니다.\n\n앞으로도 실무 현장에서의 인사이트와 탁월한 대내외 커뮤니케이션 능력을 발휘하여, 글로벌 IT 생태계를 리딩하는 경쟁력 있는 비즈니스 전문가로서 성장해 나가고자 합니다."
                                 };
+                                Analytics.track(Analytics.Events.VIEW_DEMO_CLICK);
                                 localStorage.setItem('parsedResume', JSON.stringify(mockData));
                                 navigate('/preview');
                             }}
